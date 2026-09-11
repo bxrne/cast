@@ -16,9 +16,9 @@ local vert, strip = gfx.vert, gfx.strip
 local function grain_tile(seed)
 	return gfx.image(TILE, function(x, y)
 		local n = 0.14 * tile_noise(x / 32, y / 32, 8, seed)
-			+ 0.34 * tile_noise(x / 8, y / 8, 32, seed + 3)
-			+ 0.30 * tile_noise(x / 4, y / 4, 64, seed + 7)
-			+ 0.22 * tile_noise(x / 2, y / 2, 128, seed + 13)
+		    + 0.34 * tile_noise(x / 8, y / 8, 32, seed + 3)
+		    + 0.30 * tile_noise(x / 4, y / 4, 64, seed + 7)
+		    + 0.22 * tile_noise(x / 2, y / 2, 128, seed + 13)
 		n = n + (hash2(x, y, seed + 11) - 0.5) * 0.14
 		if hash2(x, y, seed + 23) > 0.982 then
 			n = n * 0.70
@@ -62,7 +62,8 @@ local function ground_canvas(seed, width, height, char)
 		love.graphics.setColor(char.ground)
 		love.graphics.draw(grain, quad, 0, 0)
 		scatter(rng, 28, width, height, { 18, 34 }, { 10, 22 }, function(r)
-			return mix3(char.ground, mix3(palette.PEAT_SOIL, palette.GRASS, r:random()), 0.35 + r:random() * 0.4)
+			return mix3(char.ground, mix3(palette.PEAT_SOIL, palette.GRASS, r:random()),
+				0.35 + r:random() * 0.4)
 		end, { 0.18, 0.12 })
 		scatter(rng, 140, width, height, { 3, 11 }, { 2, 7 }, function(r)
 			return mix3(char.ground, mix3(palette.MOSS, palette.STONE, r:random()), 0.25 + r:random() * 0.5)
@@ -112,8 +113,8 @@ local function centerline(char, width, height)
 	for i = 0, SAMPLES do
 		local t = i / SAMPLES
 		local wobble = math.sin(t * 2.15 * math.pi + char.p1) * char.meander
-			+ math.sin(t * 5.05 * math.pi + char.p2) * char.meander * 0.32
-			+ math.sin(t * 9.4 * math.pi + char.p3) * char.meander * 0.10
+		    + math.sin(t * 5.05 * math.pi + char.p2) * char.meander * 0.32
+		    + math.sin(t * 9.4 * math.pi + char.p3) * char.meander * 0.10
 		pts[#pts + 1] = {
 			t = t,
 			x = lerp(x0, x1, t) + px * wobble,
@@ -126,7 +127,8 @@ end
 
 -- Irregular bank width along the river.
 local function ragged(t, base, pa, pb)
-	local n = 0.70 + 0.22 * math.sin(t * 13 * math.pi + pa) + 0.14 * math.sin(t * 29 * math.pi + pb) + 0.08 * math.sin(t * 47 * math.pi + pa * 0.7)
+	local n = 0.70 + 0.22 * math.sin(t * 13 * math.pi + pa) + 0.14 * math.sin(t * 29 * math.pi + pb) +
+	    0.08 * math.sin(t * 47 * math.pi + pa * 0.7)
 	return math.max(18, base * n)
 end
 
@@ -138,7 +140,8 @@ local function water_vert(p, px, py, across, char, field)
 	local spd = flow.speed(field, st, across)
 	local color = mix3(char.water_mid, char.water_deep, depth_n)
 	local hw = p.hw - WATER_INSET
-	local v = vert(p.x + px * hw * (across * 2 - 1), p.y + py * hw * (across * 2 - 1), p.t * ALONG, across, color, depth_n)
+	local v = vert(p.x + px * hw * (across * 2 - 1), p.y + py * hw * (across * 2 - 1), p.t * ALONG, across, color,
+		depth_n)
 	v.speed = spd
 	return v
 end
@@ -158,7 +161,8 @@ local function rails(pts, char, field)
 		local left = p.hw + ragged(p.t, char.bank_extra, char.p1, char.p3)
 		local right = p.hw + ragged(p.t, char.bank_extra, char.p2, char.p1)
 		local shade = 0.82 + 0.18 * math.sin(p.t * 19 * math.pi + char.p3)
-		local inner, outer = mix3(char.gravel, char.wet, 0.35 + 0.25 * shade), mix3(char.bank, char.gravel, 0.15 * (1 - shade))
+		local inner, outer = mix3(char.gravel, char.wet, 0.35 + 0.25 * shade),
+		    mix3(char.bank, char.gravel, 0.15 * (1 - shade))
 		local uv = p.t * 10
 		bank_li[i] = vert(p.x - px * wet_out, p.y - py * wet_out, uv, 0, inner)
 		bank_lo[i] = vert(p.x - px * left, p.y - py * left, uv, 1, outer)
@@ -172,9 +176,16 @@ local function rails(pts, char, field)
 		water_r[i] = water_vert(p, px, py, 1, char, field)
 	end
 	return {
-		bank_lo = bank_lo, bank_li = bank_li, bank_ri = bank_ri, bank_ro = bank_ro,
-		wet_li = wet_li, wet_lo = wet_lo, wet_ri = wet_ri, wet_ro = wet_ro,
-		water_l = water_l, water_r = water_r,
+		bank_lo = bank_lo,
+		bank_li = bank_li,
+		bank_ri = bank_ri,
+		bank_ro = bank_ro,
+		wet_li = wet_li,
+		wet_lo = wet_lo,
+		wet_ri = wet_ri,
+		wet_ro = wet_ro,
+		water_l = water_l,
+		water_r = water_r,
 	}
 end
 
@@ -186,7 +197,8 @@ local function draw_streaks(channel, time, speed)
 		local across, phase, pts = s / (STREAKS + 1), (time * speed * 0.10 + s * 0.23) % 1, {}
 		love.graphics.setColor(0.72, 0.78, 0.72, 0.06 + (s % 2) * 0.03)
 		for i = 1, #left do
-			local along = (left[i].u / ALONG + phase * (0.7 + 0.3 * ((left[i].speed or speed) / math.max(speed, 0.1)))) % 1
+			local along = (left[i].u / ALONG + phase * (0.7 + 0.3 * ((left[i].speed or speed) / math.max(speed, 0.1)))) %
+			    1
 			if along < 0.18 then
 				pts[#pts + 1] = lerp(left[i].x, right[i].x, across)
 				pts[#pts + 1] = lerp(left[i].y, right[i].y, across)

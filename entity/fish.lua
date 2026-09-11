@@ -176,7 +176,8 @@ end
 
 -- Spawn a seeded school on ranked habitat lies, already holding.
 function fish.spawn(river, seed, count)
-	count = mathx.clamp(math.floor(count or 10), 0, 24)
+	count = count or (6 + math.floor(hash01(seed, 4, 8) * 11))
+	count = mathx.clamp(math.floor(count), 0, 24)
 	local specs = {}
 	for i = 1, count do
 		specs[i] = species.at(math.floor(hash01(seed, i, 3) * #species.list) + 1)
@@ -256,15 +257,15 @@ function fish.draw(list)
 	end
 end
 
--- Debug dots for habitat score using a mid-tolerance brown trout curve.
-function fish.draw_lies(river)
-	local spec = species.by_id.brown
-	love.graphics.setPointSize(4)
-	local cells = habitat.grid(river)
-	for i = 1, #cells do
-		local sample = cells[i]
-		love.graphics.setColor(0.95, 0.75, 0.2, math.min(0.75, habitat.score(sample, spec, river) * 0.55))
-		love.graphics.points(sample.x, sample.y)
+-- Labels for each trout: species, feed phase, and column.
+function fish.draw_indicators(list)
+	for i = 1, #list do
+		local self = list[i]
+		local label = string.format("%s  %s  %.0f%%", self.species.id, self.phase, self.column * 100)
+		love.graphics.setColor(0.10, 0.12, 0.08, 0.7)
+		love.graphics.rectangle("fill", self.x + 8, self.y - 12, 6 * #label + 4, 14, 2, 2)
+		love.graphics.setColor(0.90, 0.86, 0.68)
+		love.graphics.print(label, self.x + 10, self.y - 12)
 	end
 end
 

@@ -11,7 +11,7 @@ local world, dbg
 -- Spawn player and fish for the current seed.
 local function spawn_entities()
 	world.player = player.spawn(world.river, world.seed)
-	world.fish = fish.spawn(world.river, world.seed, world.fish_count)
+	world.fish = fish.spawn(world.river, world.seed)
 end
 
 -- Apply a new seed to the river and entities.
@@ -30,7 +30,7 @@ end
 
 -- Load world, river, entities, and the debug panel.
 function love.load()
-	world = { seed = 1, paused = false, time_scale = 1, fish_count = 10, show_lies = false }
+	world = { seed = 1, paused = false, time_scale = 1, show_fish = false }
 	world.river = draw.river.new({ seed = world.seed })
 	spawn_entities()
 	dbg = debug_ui.new({
@@ -39,11 +39,7 @@ function love.load()
 			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
 			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
 			ctrl("show_flow", "bool", function() return world.river.show_flow end, function(v) world.river.show_flow = v end),
-			ctrl("show_lies", "bool", function() return world.show_lies end, function(v) world.show_lies = v end),
-			ctrl("fish_count", "int", function() return world.fish_count end, function(v)
-				world.fish_count = math.floor(v)
-				world.fish = fish.spawn(world.river, world.seed, world.fish_count)
-			end, { min = 0, max = 24, label = "fish" }),
+			ctrl("show_fish", "bool", function() return world.show_fish end, function(v) world.show_fish = v end, { label = "fish tags" }),
 			ctrl("bed", "label", function()
 				return world.river.char.bed_type.id
 			end, function() end),
@@ -59,16 +55,16 @@ function love.update(dt)
 	dt = dt * world.time_scale
 	world.river:update(dt)
 	fish.update(world.fish, dt, world.river, world.player)
-	world.player:update(dt, world.river)
+	world.player:update(dt, world.river, dbg.open)
 end
 
 -- Draw world then debug overlay.
 function love.draw()
 	world.river:draw()
-	if world.show_lies then
-		fish.draw_lies(world.river)
-	end
 	fish.draw(world.fish)
+	if world.show_fish then
+		fish.draw_indicators(world.fish)
+	end
 	world.player:draw()
 	dbg:draw()
 end
