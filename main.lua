@@ -57,6 +57,17 @@ function love.load()
 					world.time_scale = v
 				end,
 			},
+			{
+				id = "show_flow",
+				label = "show flow",
+				kind = "bool",
+				get = function()
+					return world.river.show_flow
+				end,
+				set = function(v)
+					world.river.show_flow = v
+				end,
+			},
 		},
 	})
 end

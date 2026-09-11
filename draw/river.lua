@@ -1,3 +1,5 @@
+local flow = require "draw.flow"
+
 local river = {}
 river.__index = river
 
@@ -50,13 +52,17 @@ float noise(vec2 p) {
 vec4 effect(vec4 color, Image tex, vec2 uv, vec2 screen) {
 	float along = uv.x;
 	float across = uv.y;
-	vec2 flow = vec2(along * 7.0 - time * speed, across * 11.0);
-	float n1 = noise(flow);
-	float n2 = noise(flow * 2.3 + vec2(1.7, time * 0.08));
-	vec3 c = color.rgb * (0.90 + 0.10 * n1);
-	c += pow(clamp(n2, 0.0, 1.0), 9.0) * 0.14;
-	float edge = smoothstep(0.0, 0.11, across) * smoothstep(0.0, 0.11, 1.0 - across);
-	c = mix(foam, c, edge);
+	vec2 dir = vec2(along * 11.0 - time * speed, across * 2.4);
+	float n1 = noise(dir);
+	float n2 = noise(dir * vec2(1.8, 1.15) + vec2(2.1, 0.4));
+	float n3 = noise(dir * vec2(0.45, 0.8) + vec2(time * 0.05, 3.0));
+	vec3 c = color.rgb * (0.93 + 0.07 * n3);
+	float spec = pow(clamp(n1 * 0.55 + n2 * 0.45, 0.0, 1.0), 22.0) * 0.07;
+	c += spec * vec3(0.78, 0.84, 0.80);
+	float rim = min(across, 1.0 - across);
+	float foam_n = noise(vec2(along * 18.0 - time * speed * 0.4, across * 6.0));
+	float edge = smoothstep(0.0, 0.07 + 0.06 * foam_n, rim);
+	c = mix(mix(foam, c, 0.55 + 0.45 * foam_n), c, edge);
 	return vec4(c, 1.0);
 }
 ]]
@@ -316,19 +322,25 @@ local function ragged(t, base, pa, pb)
 	return math.max(18, base * n)
 end
 
-local function water_vert(p, px, py, across, char)
+local function water_vert(p, px, py, across, char, field)
 	local thalweg = 0.5 + 0.08 * math.sin(p.t * 4.1 + char.p1)
 	local depth = 1 - math.min(1, (across - thalweg) ^ 2 * 5.2)
 	local color = mix3(char.water_mid, char.water_deep, depth)
 	local dist = p.hw * (across * 2 - 1)
-	return vert(p.x + px * dist, p.y + py * dist, p.t * ALONG, across, color)
+	local st = field.stations[p.i]
+	local spd = flow.speed(field, st.kappa, across, st.width_scale)
+	local chop = clamp((spd / field.base_speed - 0.85) / 0.8, 0, 1)
+	color = mix3(color, char.foam, chop * 0.10)
+	local v = vert(p.x + px * dist, p.y + py * dist, p.t * ALONG, across, color)
+	v.speed = spd
+	return v
 end
 
 local function bank_vert(x, y, t, across, rgb)
 	return vert(x, y, t * 10, across, rgb)
 end
 
-local function rails(pts, char)
+local function rails(pts, char, field)
 	local bank_lo, bank_li = {}, {}
 	local bank_ri, bank_ro = {}, {}
 	local wet_l, wet_r = {}, {}
@@ -336,6 +348,7 @@ local function rails(pts, char)
 
 	for i = 1, #pts do
 		local p = pts[i]
+		p.i = i
 		local tx, ty = tangent(pts, i)
 		local px, py = -ty, tx
 		local wet = p.hw + WET_LIP * (0.85 + 0.25 * math.sin(p.t * 11 * math.pi + char.p2))
@@ -352,8 +365,8 @@ local function rails(pts, char)
 		bank_ro[i] = bank_vert(p.x + px * right, p.y + py * right, p.t, 1, outer)
 		wet_l[i] = vert(p.x - px * wet, p.y - py * wet, along, 0, char.wet)
 		wet_r[i] = vert(p.x + px * wet, p.y + py * wet, along, 1, char.wet)
-		water_l[i] = water_vert(p, px, py, 0, char)
-		water_r[i] = water_vert(p, px, py, 1, char)
+		water_l[i] = water_vert(p, px, py, 0, char, field)
+		water_r[i] = water_vert(p, px, py, 1, char, field)
 	end
 
 	return {
@@ -377,15 +390,16 @@ end
 local function draw_streaks(channel, time, speed)
 	local left, right = channel.water_l, channel.water_r
 	local n = #left
-	love.graphics.setLineWidth(1.1)
+	love.graphics.setLineWidth(1)
 	for s = 1, STREAKS do
 		local across = s / (STREAKS + 1)
-		local phase = (time * speed * 0.12 + s * 0.2) % 1
-		love.graphics.setColor(0.72, 0.78, 0.72, 0.10 + (s % 2) * 0.04)
+		local phase = (time * speed * 0.10 + s * 0.23) % 1
+		love.graphics.setColor(0.72, 0.78, 0.72, 0.06 + (s % 2) * 0.03)
 		local pts = {}
 		for i = 1, n do
-			local along = (left[i].u / ALONG + phase) % 1
-			if along < 0.48 then
+			local local_speed = left[i].speed or speed
+			local along = (left[i].u / ALONG + phase * (0.7 + 0.3 * (local_speed / math.max(speed, 0.1)))) % 1
+			if along < 0.18 then
 				pts[#pts + 1] = lerp(left[i].x, right[i].x, across)
 				pts[#pts + 1] = lerp(left[i].y, right[i].y, across)
 			else
@@ -404,6 +418,7 @@ function river.new(opts)
 		width = opts.width or love.graphics.getWidth(),
 		height = opts.height or love.graphics.getHeight(),
 		time = 0,
+		show_flow = false,
 		shader = love.graphics.newShader(WATER),
 	}, river)
 	self:rebuild()
@@ -419,10 +434,13 @@ function river:rebuild()
 	release(self.bank_tex)
 
 	local char = character(self.seed, self.width, self.height)
-	local channel = rails(centerline(char, self.width, self.height), char)
+	local pts = centerline(char, self.width, self.height)
+	local field = flow.build(pts, char.flow_speed)
+	local channel = rails(pts, char, field)
 	local bank_tex = bank_tile(self.seed)
 
 	self.char = char
+	self.flow = field
 	self.channel = channel
 	self.ground = ground_canvas(self.seed, self.width, self.height, char)
 	self.bank_tex = bank_tex
@@ -449,6 +467,30 @@ function river:update(dt)
 	self.time = self.time + dt
 end
 
+function river:sample(t, across)
+	return flow.sample(self.flow, t, across)
+end
+
+function river:lie_score(sample)
+	return flow.lie_score(sample)
+end
+
+function river:draw_flow()
+	local field = self.flow
+	love.graphics.setLineWidth(1.5)
+	for i = 1, 20 do
+		local t = (i - 0.5) / 20
+		for j = 1, 5 do
+			local across = j / 6
+			local s = flow.sample(field, t, across)
+			local len = 10 + s.speed * 14
+			local k = (s.speed / field.base_speed)
+			love.graphics.setColor(0.2 + k * 0.6, 0.55, 0.85 - k * 0.4, 0.75)
+			love.graphics.line(s.x, s.y, s.x + s.tx * len, s.y + s.ty * len)
+		end
+	end
+end
+
 function river:draw()
 	local char = self.char
 	love.graphics.setColor(1, 1, 1, 1)
@@ -465,6 +507,9 @@ function river:draw()
 	love.graphics.setShader()
 
 	draw_streaks(self.channel, self.time, char.flow_speed)
+	if self.show_flow then
+		self:draw_flow()
+	end
 end
 
 return river
