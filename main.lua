@@ -3,9 +3,9 @@
 local draw = require "draw"
 local debug_ui = require "ui.debug"
 local fish = require "entity.fish"
-local rand = require "lib.rand"
 
 local world, dbg
+local shot_taken = false
 
 -- Spawn the seeded school for the current river.
 local function spawn_entities()
@@ -28,7 +28,7 @@ end
 
 -- Load world, river, entities, and the debug panel.
 function love.load()
-	world = { seed = 1, paused = false, time_scale = 1, show_fish = false }
+	world = { seed = 1, paused = false, time_scale = 1, show_fish = true }
 	world.river = draw.river.new({ seed = world.seed })
 	spawn_entities()
 	dbg = debug_ui.new({
@@ -58,22 +58,24 @@ end
 -- Draw world then debug overlay.
 function love.draw()
 	world.river:draw()
-	fish.draw(world.fish)
+	fish.draw(world.fish, world.river)
 	if world.show_fish then
 		fish.draw_indicators(world.fish)
 	end
 	dbg:draw()
 end
 
--- Debug keys first, then R rolls a seed.
+-- Debug panel keys first; seeds change only from the panel.
 function love.keypressed(key)
 	if dbg:keypressed(key) then
 		return
 	end
-	if key == "r" then
-		reseed(rand.other(world.seed, 1, 999999))
-	elseif key == "escape" then
+	if key == "escape" then
 		love.event.quit()
+	elseif key == "f12" then
+		love.graphics.captureScreenshot(function(img)
+			img:encode("current.png")
+		end)
 	end
 end
 

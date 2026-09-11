@@ -115,7 +115,7 @@ function debug:draw()
 		love.graphics.printf(format_value(controls[i]), x + PAD, cy, PANEL_W - PAD * 2, "right")
 	end
 	love.graphics.setColor(0.50, 0.49, 0.38)
-	love.graphics.print("arrows adjust   R roll seed", x + PAD, y + h - PAD - ROW_H)
+	love.graphics.print("arrows adjust   F1 panel", x + PAD, y + h - PAD - ROW_H)
 	love.graphics.pop()
 end
 
