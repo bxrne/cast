@@ -100,6 +100,7 @@ local function character(seed, width, height)
 	local span = math.min(width, height)
 	local char = palette.make(bed, lush)
 	char.bed_type = bed
+	char.lush = lush
 	char.water_half = lerp(78, span * 0.30, size)
 	char.bank_extra = lerp(34, 96, 0.45 * size + 0.55 * lush)
 	char.meander = lerp(span * 0.035, span * 0.12, energy) * (1.0 - 0.45 * size)
