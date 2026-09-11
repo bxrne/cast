@@ -3,14 +3,12 @@
 local draw = require "draw"
 local debug_ui = require "ui.debug"
 local fish = require "entity.fish"
-local player = require "entity.player"
 local rand = require "lib.rand"
 
 local world, dbg
 
--- Spawn player and fish for the current seed.
+-- Spawn the seeded school for the current river.
 local function spawn_entities()
-	world.player = player.spawn(world.river, world.seed)
 	world.fish = fish.spawn(world.river, world.seed)
 end
 
@@ -54,8 +52,7 @@ function love.update(dt)
 	end
 	dt = dt * world.time_scale
 	world.river:update(dt)
-	fish.update(world.fish, dt, world.river, world.player)
-	world.player:update(dt, world.river, dbg.open)
+	fish.update(world.fish, dt, world.river, nil)
 end
 
 -- Draw world then debug overlay.
@@ -65,7 +62,6 @@ function love.draw()
 	if world.show_fish then
 		fish.draw_indicators(world.fish)
 	end
-	world.player:draw()
 	dbg:draw()
 end
 
