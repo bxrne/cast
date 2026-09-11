@@ -39,9 +39,9 @@ function gfx.ellipse(x, y, rx, ry, rot, rgb, alpha)
 	love.graphics.pop()
 end
 
--- Vertex for a colored textured mesh.
-function gfx.vert(x, y, u, v, rgb)
-	return { x = x, y = y, u = u, v = v, r = rgb[1], g = rgb[2], b = rgb[3] }
+-- Vertex for a colored textured mesh. Alpha defaults to 1.
+function gfx.vert(x, y, u, v, rgb, a)
+	return { x = x, y = y, u = u, v = v, r = rgb[1], g = rgb[2], b = rgb[3], a = a or 1 }
 end
 
 -- Triangle strip between two equal-length rails.
@@ -49,8 +49,8 @@ function gfx.strip(left, right)
 	local verts = {}
 	for i = 1, #left do
 		local l, r = left[i], right[i]
-		verts[#verts + 1] = { l.x, l.y, l.u, l.v, l.r, l.g, l.b, 1 }
-		verts[#verts + 1] = { r.x, r.y, r.u, r.v, r.r, r.g, r.b, 1 }
+		verts[#verts + 1] = { l.x, l.y, l.u, l.v, l.r, l.g, l.b, l.a or 1 }
+		verts[#verts + 1] = { r.x, r.y, r.u, r.v, r.r, r.g, r.b, r.a or 1 }
 	end
 	return love.graphics.newMesh(verts, "strip", "static")
 end

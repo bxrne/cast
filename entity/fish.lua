@@ -13,13 +13,15 @@ local MANNERS = {
 	porpoise = { duration = 1.7, height = 7.5, ring = 14 },
 }
 
--- Score a flow sample for this species' lie preference.
+-- Score a flow sample for this species' lie preference, including depth.
 local function lie_value(sample, spec, river)
 	local edge = math.min(sample.across, 1 - sample.across)
+	local depth_fit = 1 - math.abs(sample.depth_n - spec.depth_pref)
 	return river:lie_score(sample)
 		+ spec.cover_need * sample.pressure * 0.35
 		- (1 - spec.current_tolerance) * sample.speed * 0.4
 		+ spec.edge_bias * (0.35 - edge) * 0.8
+		+ spec.depth_need * depth_fit * 0.9
 end
 
 -- Search nearby (t, across) for the best hold.
@@ -46,7 +48,14 @@ end
 
 -- True when the fish should start or continue a rise.
 local function due_to_rise(self)
-	return self.surface or (self.at_lie and self.hold_time >= self.period)
+	if self.surface then
+		return true
+	end
+	if not self.at_lie or self.hold_time < self.period then
+		return false
+	end
+	local depth_n = self.sample and self.sample.depth_n or 1
+	return depth_n <= self.species.rise_depth
 end
 
 -- Step toward the current lie. Returns true on arrival.

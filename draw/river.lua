@@ -7,7 +7,7 @@ local river = {}
 river.__index = river
 
 local SAMPLES, STREAKS, TILE, BANK_TILE = 96, 3, 256, 128
-local ALONG, WET_LIP = 8, 8
+local ALONG, WET_LIP, WATER_INSET = 8, 8, 2.5
 local lerp, clamp, mix3, hash2 = mathx.lerp, mathx.clamp, mathx.mix3, mathx.hash2
 local tile_noise, tangent, TAU = mathx.tile_noise, mathx.tangent, mathx.TAU
 local vert, strip = gfx.vert, gfx.strip
@@ -88,12 +88,14 @@ local function river_size(rng)
 	return 0.78 + rng:random() * 0.22
 end
 
--- Seeded channel proportions and colours.
+-- Seeded channel proportions, bed type, and colours.
 local function character(seed, width, height)
 	local rng = love.math.newRandomGenerator(seed)
-	local size, peat, lush, energy = river_size(rng), rng:random(), rng:random(), rng:random()
+	local size, lush, energy = river_size(rng), rng:random(), rng:random()
+	local bed = palette.bed_at(rng:random())
 	local span = math.min(width, height)
-	local char = palette.make(peat, lush)
+	local char = palette.make(bed, lush)
+	char.bed_type = bed
 	char.water_half = lerp(78, span * 0.30, size)
 	char.bank_extra = lerp(34, 96, 0.45 * size + 0.55 * lush)
 	char.meander = lerp(span * 0.035, span * 0.12, energy) * (1.0 - 0.45 * size)
@@ -128,43 +130,52 @@ local function ragged(t, base, pa, pb)
 	return math.max(18, base * n)
 end
 
--- Water vertex with depth colour and local speed.
+-- Water vertex tinted by depth. Alpha carries normalised depth for the shader.
 local function water_vert(p, px, py, across, char, field)
-	local thalweg = 0.5 + 0.08 * math.sin(p.t * 4.1 + char.p1)
-	local depth = 1 - math.min(1, (across - thalweg) ^ 2 * 5.2)
 	local st = field.stations[p.i]
-	local spd = flow.speed(field, st.kappa, across, st.width_scale)
-	local color = mix3(mix3(char.water_mid, char.water_deep, depth), char.foam, clamp((spd / field.base_speed - 0.85) / 0.8, 0, 1) * 0.10)
-	local v = vert(p.x + px * p.hw * (across * 2 - 1), p.y + py * p.hw * (across * 2 - 1), p.t * ALONG, across, color)
+	local depth = flow.depth(st, across)
+	local depth_n = clamp(depth / 36, 0, 1)
+	local spd = flow.speed(field, st, across)
+	local color = mix3(char.water_mid, char.water_deep, depth_n)
+	local hw = p.hw - WATER_INSET
+	local v = vert(p.x + px * hw * (across * 2 - 1), p.y + py * hw * (across * 2 - 1), p.t * ALONG, across, color, depth_n)
 	v.speed = spd
 	return v
 end
 
--- Bank/water rails at every station.
+-- Bank, wet lip, and water rails at every station.
 local function rails(pts, char, field)
 	local bank_lo, bank_li, bank_ri, bank_ro = {}, {}, {}, {}
-	local wet_l, wet_r, water_l, water_r = {}, {}, {}, {}
+	local wet_li, wet_lo, wet_ri, wet_ro = {}, {}, {}, {}
+	local water_l, water_r = {}, {}
 	for i = 1, #pts do
 		local p = pts[i]
 		p.i = i
 		local tx, ty = tangent(pts, i)
 		local px, py = -ty, tx
-		local wet = p.hw + WET_LIP * (0.85 + 0.25 * math.sin(p.t * 11 * math.pi + char.p2))
+		local lip = WET_LIP * (0.85 + 0.25 * math.sin(p.t * 11 * math.pi + char.p2))
+		local wet_in, wet_out = p.hw - WATER_INSET, p.hw + lip
 		local left = p.hw + ragged(p.t, char.bank_extra, char.p1, char.p3)
 		local right = p.hw + ragged(p.t, char.bank_extra, char.p2, char.p1)
 		local shade = 0.82 + 0.18 * math.sin(p.t * 19 * math.pi + char.p3)
 		local inner, outer = mix3(char.gravel, char.wet, 0.35 + 0.25 * shade), mix3(char.bank, char.gravel, 0.15 * (1 - shade))
-		local along = p.t * ALONG
-		bank_li[i] = vert(p.x - px * wet, p.y - py * wet, p.t * 10, 0, inner)
-		bank_lo[i] = vert(p.x - px * left, p.y - py * left, p.t * 10, 1, outer)
-		bank_ri[i] = vert(p.x + px * wet, p.y + py * wet, p.t * 10, 0, inner)
-		bank_ro[i] = vert(p.x + px * right, p.y + py * right, p.t * 10, 1, outer)
-		wet_l[i] = vert(p.x - px * wet, p.y - py * wet, along, 0, char.wet)
-		wet_r[i] = vert(p.x + px * wet, p.y + py * wet, along, 1, char.wet)
+		local uv = p.t * 10
+		bank_li[i] = vert(p.x - px * wet_out, p.y - py * wet_out, uv, 0, inner)
+		bank_lo[i] = vert(p.x - px * left, p.y - py * left, uv, 1, outer)
+		bank_ri[i] = vert(p.x + px * wet_out, p.y + py * wet_out, uv, 0, inner)
+		bank_ro[i] = vert(p.x + px * right, p.y + py * right, uv, 1, outer)
+		wet_li[i] = vert(p.x - px * wet_in, p.y - py * wet_in, uv, 0, char.wet)
+		wet_lo[i] = vert(p.x - px * wet_out, p.y - py * wet_out, uv, 1, inner)
+		wet_ri[i] = vert(p.x + px * wet_in, p.y + py * wet_in, uv, 0, char.wet)
+		wet_ro[i] = vert(p.x + px * wet_out, p.y + py * wet_out, uv, 1, inner)
 		water_l[i] = water_vert(p, px, py, 0, char, field)
 		water_r[i] = water_vert(p, px, py, 1, char, field)
 	end
-	return { bank_lo = bank_lo, bank_li = bank_li, bank_ri = bank_ri, bank_ro = bank_ro, wet_l = wet_l, wet_r = wet_r, water_l = water_l, water_r = water_r }
+	return {
+		bank_lo = bank_lo, bank_li = bank_li, bank_ri = bank_ri, bank_ro = bank_ro,
+		wet_li = wet_li, wet_lo = wet_lo, wet_ri = wet_ri, wet_ro = wet_ro,
+		water_l = water_l, water_r = water_r,
+	}
 end
 
 -- Short current streaks that stay inside the water strip.
@@ -205,20 +216,23 @@ end
 
 -- Rebuild meshes from the current seed and size.
 function river:rebuild()
-	gfx.release_all(self.bank_l, self.bank_r, self.wet, self.water, self.ground, self.bank_tex)
+	gfx.release_all(self.bank_l, self.bank_r, self.wet_l, self.wet_r, self.water, self.ground, self.bank_tex)
 	local char = character(self.seed, self.width, self.height)
 	local pts = centerline(char, self.width, self.height)
-	local field = flow.build(pts, char.flow_speed)
+	local field = flow.build(pts, char.flow_speed, char.bed_type)
 	local channel = rails(pts, char, field)
 	self.char, self.flow, self.channel = char, field, channel
 	self.ground = ground_canvas(self.seed, self.width, self.height, char)
 	self.bank_tex = bank_tile(self.seed)
 	self.bank_l = strip(channel.bank_lo, channel.bank_li)
 	self.bank_r = strip(channel.bank_ri, channel.bank_ro)
-	self.wet = strip(channel.wet_l, channel.wet_r)
+	self.wet_l = strip(channel.wet_lo, channel.wet_li)
+	self.wet_r = strip(channel.wet_ri, channel.wet_ro)
 	self.water = strip(channel.water_l, channel.water_r)
 	self.bank_l:setTexture(self.bank_tex)
 	self.bank_r:setTexture(self.bank_tex)
+	self.wet_l:setTexture(self.bank_tex)
+	self.wet_r:setTexture(self.bank_tex)
 end
 
 -- Replace the seed and rebuild.
@@ -268,13 +282,16 @@ function river:draw()
 	love.graphics.draw(self.ground)
 	love.graphics.draw(self.bank_l)
 	love.graphics.draw(self.bank_r)
-	love.graphics.draw(self.wet)
 	self.shader:send("time", self.time)
 	self.shader:send("speed", char.flow_speed)
-	self.shader:send("foam", char.foam)
+	self.shader:send("bed_color", char.bed[1], char.bed[2], char.bed[3])
+	self.shader:send("spot_color", char.spot[1], char.spot[2], char.spot[3])
 	love.graphics.setShader(self.shader)
 	love.graphics.draw(self.water)
 	love.graphics.setShader()
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.draw(self.wet_l)
+	love.graphics.draw(self.wet_r)
 	draw_streaks(self.channel, self.time, char.flow_speed)
 	if self.show_flow then
 		self:draw_flow()

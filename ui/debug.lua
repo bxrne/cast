@@ -23,6 +23,9 @@ local function nudge(ctrl, dir)
 		ctrl.set(not ctrl.get())
 		return
 	end
+	if ctrl.kind == "label" then
+		return
+	end
 	if ctrl.kind == "seed" then
 		ctrl.set(rand.other(ctrl.get(), ctrl.min or 1, ctrl.max or 999999))
 		return

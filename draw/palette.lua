@@ -3,23 +3,80 @@ local mix3 = require("lib.math").mix3
 local STONE, MOSS = { 0.36, 0.34, 0.28 }, { 0.27, 0.36, 0.16 }
 local PEAT_SOIL, GRASS = { 0.18, 0.16, 0.10 }, { 0.24, 0.30, 0.14 }
 
+-- Bed types. Water stays bluish; spots and stain come from the bed.
+local BEDS = {
+	{
+		id = "chalk",
+		water = { 0.28, 0.50, 0.58 },
+		water_deep = { 0.10, 0.32, 0.46 },
+		bed = { 0.74, 0.72, 0.60 },
+		spot = { 0.52, 0.50, 0.38 },
+		depth_scale = 0.82,
+		pool_contrast = 0.32,
+	},
+	{
+		id = "peat",
+		water = { 0.18, 0.34, 0.40 },
+		water_deep = { 0.06, 0.16, 0.24 },
+		bed = { 0.16, 0.12, 0.08 },
+		spot = { 0.28, 0.20, 0.12 },
+		depth_scale = 1.18,
+		pool_contrast = 0.72,
+	},
+	{
+		id = "gravel",
+		water = { 0.22, 0.42, 0.52 },
+		water_deep = { 0.08, 0.24, 0.38 },
+		bed = { 0.44, 0.38, 0.26 },
+		spot = { 0.58, 0.50, 0.32 },
+		depth_scale = 1.0,
+		pool_contrast = 0.55,
+	},
+	{
+		id = "silt",
+		water = { 0.24, 0.42, 0.46 },
+		water_deep = { 0.10, 0.24, 0.32 },
+		bed = { 0.40, 0.36, 0.26 },
+		spot = { 0.30, 0.36, 0.20 },
+		depth_scale = 0.88,
+		pool_contrast = 0.22,
+	},
+	{
+		id = "bedrock",
+		water = { 0.16, 0.36, 0.50 },
+		water_deep = { 0.05, 0.18, 0.34 },
+		bed = { 0.30, 0.32, 0.34 },
+		spot = { 0.18, 0.20, 0.24 },
+		depth_scale = 1.22,
+		pool_contrast = 0.8,
+	},
+}
+
 local palette = {
 	STONE = STONE,
 	MOSS = MOSS,
 	PEAT_SOIL = PEAT_SOIL,
 	GRASS = GRASS,
+	BEDS = BEDS,
 }
 
--- Mix a river palette from peat stain and bank lushness.
-function palette.make(peat, lush)
+-- Pick a bed type from a 0..1 roll.
+function palette.bed_at(u)
+	return BEDS[math.min(#BEDS, math.floor(u * #BEDS) + 1)]
+end
+
+-- Mix land and water colours from a bed type and bank lushness.
+function palette.make(bed, lush)
+	local stain = bed.id == "peat" and 0.55 or (bed.id == "silt" and 0.35 or 0.12)
 	return {
-		ground = mix3(mix3(STONE, GRASS, lush), PEAT_SOIL, peat * 0.55),
-		bank = mix3(mix3(STONE, MOSS, lush), mix3(PEAT_SOIL, MOSS, 0.35), peat * 0.45),
-		wet = mix3({ 0.16, 0.15, 0.12 }, { 0.12, 0.14, 0.10 }, peat),
-		gravel = mix3({ 0.32, 0.30, 0.24 }, { 0.22, 0.20, 0.16 }, peat),
-		water_deep = mix3({ 0.10, 0.20, 0.18 }, { 0.06, 0.10, 0.08 }, peat),
-		water_mid = mix3({ 0.18, 0.32, 0.26 }, { 0.12, 0.18, 0.14 }, peat),
-		foam = mix3({ 0.58, 0.62, 0.56 }, { 0.48, 0.46, 0.38 }, peat),
+		ground = mix3(mix3(STONE, GRASS, lush), mix3(PEAT_SOIL, bed.bed, 0.35), stain),
+		bank = mix3(mix3(STONE, MOSS, lush), mix3(bed.bed, MOSS, 0.4), stain * 0.6),
+		wet = mix3({ 0.22, 0.20, 0.16 }, bed.bed, 0.45),
+		gravel = mix3({ 0.34, 0.32, 0.24 }, bed.bed, 0.5),
+		water_mid = bed.water,
+		water_deep = bed.water_deep,
+		bed = bed.bed,
+		spot = bed.spot,
 	}
 end
 

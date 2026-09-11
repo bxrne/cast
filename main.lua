@@ -44,6 +44,9 @@ function love.load()
 				world.fish_count = math.floor(v)
 				world.fish = fish.spawn(world.river, world.seed, world.fish_count)
 			end, { min = 0, max = 24, label = "fish" }),
+			ctrl("bed", "label", function()
+				return world.river.char.bed_type.id
+			end, function() end),
 		},
 	})
 end
