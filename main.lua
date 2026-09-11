@@ -42,11 +42,11 @@ function love.load()
 			ctrl("turbulence", "float",
 				function() return world.river.flow.turb_scale end,
 				function(v) world.river.flow.turb_scale = v end,
-				{ min = 0, max = 2, step = 0.1 }),
+				{ min = 0, max = 1, step = 0.05 }),
 			ctrl("bed exposure", "float",
 				function() return world.river.bed_exposure end,
 				function(v) world.river.bed_exposure = v end,
-				{ min = 0.2, max = 1.4, step = 0.05 }),
+				{ min = 0.4, max = 2.8, step = 0.2 }),
 			ctrl("water sheen", "float",
 				function() return world.river.water_sheen end,
 				function(v) world.river.water_sheen = v end,
@@ -92,8 +92,9 @@ function love.keypressed(key)
 	if key == "escape" then
 		love.event.quit()
 	elseif key == "f12" then
+		-- Save to the write dir as current.png; format comes first here.
 		love.graphics.captureScreenshot(function(img)
-			img:encode("current.png")
+			img:encode("png", "current.png")
 		end)
 	end
 end
