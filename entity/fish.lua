@@ -17,6 +17,19 @@ local MANNERS = {
 -- Reused scratch for pose lookups. No alloc in the hot loop.
 local SCRATCH = {}
 local ORDER = {}
+local BELLY_CREAM = { 0.82, 0.80, 0.66 }
+
+-- Body shader, loaded on first draw. Colours the flank from
+-- dorsal spine to pale belly with a behaviour linked flash.
+local body_shader = nil
+local function bshader()
+	if not body_shader then
+		local code = love.filesystem.read("draw/fish.glsl")
+		assert(code, "draw/fish.glsl")
+		body_shader = love.graphics.newShader(code)
+	end
+	return body_shader
+end
 
 -- Choose a habitat lie from the cached river grid.
 local function pick_lie(self, river, extra)
@@ -321,9 +334,12 @@ local ACT = {
 
 -- Draw deep fish first. Visibility follows water clarity, column
 -- height, and the feed phase; only a rising fish shows on the film.
+-- The body shader paints dorsal to belly with a flash set by
+-- behaviour: arch peak on a rise, pulse on chase and burst.
 function fish.draw(list, river)
 	local clar = river and mind.clarity(river) or 0.5
 	local deep = river and river.char.water_deep or { 0.10, 0.20, 0.30 }
+	local sh = bshader()
 	for i = 1, #list do ORDER[i] = list[i] end
 	for i = #list + 1, #ORDER do ORDER[i] = nil end
 	table.sort(ORDER, function(a, b) return a.column < b.column end)
@@ -338,16 +354,19 @@ function fish.draw(list, river)
 		local phase = self.clock * beat * act.freq * 6.283 + self.id * 1.7
 		local slither = (self.species.slither or 0.3) * act.slide
 		local tail_amp = (self.species.tail_amp or 0.8) * act.amp + 0.1
+		local flash = 0
+		if self.activity == "chase" or self.activity == "burst" then
+			flash = 0.22 + 0.10 * math.sin(self.clock * 25)
+		end
 		if self.surface and col > 0.7 then
 			local u = self.surface.t / self.surface.duration
 			local arch = math.sin(u * math.pi)
 			lift = -self.surface.height * arch
 			vis = 0.95
 			tail_amp = tail_amp * (1 + arch * 1.2)
+			flash = arch * 0.8
 		end
 		local sink = (1 - col) * 0.62
-		local body = mix3(self.species.color, deep, sink)
-		local stripe = mix3(self.species.stripe, deep, sink)
 		local ca, sa = math.cos(ang), math.sin(ang)
 		-- Hold surge. The whole fish breathes a touch along its
 		-- heading instead of shivering in place.
@@ -355,7 +374,22 @@ function fish.draw(list, river)
 		if act.steady > 0 then
 			surge = math.sin(phase * 0.5) * len * 0.03 * act.steady
 		end
-		love.graphics.setColor(body[1], body[2], body[3], vis)
+		if self.surface and col > 0.7 then
+			local u = self.surface.t / self.surface.duration
+			love.graphics.setColor(0.78, 0.84, 0.80, 0.22 * math.sin(u * math.pi))
+			love.graphics.ellipse("line", self.x, self.y, self.surface.ring * (0.4 + 0.6 * u), self.surface.ring * 0.35 * (0.4 + 0.6 * u))
+		end
+		sh:send("dorsal", self.species.color)
+		sh:send("belly", mix3(self.species.color, BELLY_CREAM, 0.7))
+		sh:send("stripe", self.species.stripe)
+		sh:send("deep", deep)
+		sh:send("sink", sink)
+		sh:send("flash", flash)
+		sh:send("center", { self.x, self.y + lift })
+		sh:send("angle", ang)
+		sh:send("half_h", len * 0.10)
+		love.graphics.setShader(sh)
+		love.graphics.setColor(1, 1, 1, vis)
 		for s = 1, 5 do
 			local u = s / 6
 			local along, lat, w = segment(self, u, len, phase, slither, tail_amp, act.steady)
@@ -363,7 +397,6 @@ function fish.draw(list, river)
 			local wy = self.y + lift + sa * (along + surge) + ca * lat
 			love.graphics.ellipse("fill", wx, wy, len * 0.11, w * 0.5, ang, 8)
 		end
-		love.graphics.setColor(stripe[1], stripe[2], stripe[3], vis)
 		local tu = 0.82
 		local along, lat = segment(self, tu, len, phase, slither, tail_amp * 1.2, act.steady)
 		local tx = self.x + ca * (along + surge) - sa * lat
@@ -374,6 +407,7 @@ function fish.draw(list, river)
 		love.graphics.rotate(ang + flick * 0.12)
 		love.graphics.polygon("fill", 0, 0, -len * 0.16, len * 0.07 + flick * 0.3, -len * 0.16, -len * 0.07 + flick * 0.3)
 		love.graphics.pop()
+		love.graphics.setShader()
 	end
 end
 
