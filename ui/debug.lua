@@ -65,7 +65,8 @@ function debug:keypressed(key)
 	if not self.open or #self.controls == 0 then
 		return false
 	end
-	local n, keys = #self.controls, {
+	local n = #self.controls
+	local keys = {
 		up = function()
 			self.selected = ((self.selected - 2) % n) + 1
 		end,
