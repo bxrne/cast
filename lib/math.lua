@@ -30,14 +30,17 @@ function mathx.fract(x)
 	return x - floor(x)
 end
 
--- Deterministic 0..1 hash of up to three numbers.
+-- Deterministic 0..1 hash of up to three numbers. No sin in
+-- the hot path. Fract of a weighted sum is fast and stable.
 function mathx.hash01(a, b, c)
-	return mathx.fract(sin(a * 127.1 + (b or 0) * 311.7 + (c or 0) * 74.7) * 43758.5453)
+	local x = a * 12.9898 + (b or 0) * 78.233 + (c or 0) * 37.719
+	return x - floor(x)
 end
 
--- Tile-friendly 2D hash.
+-- Tile-friendly 2D hash. Same fast path, no trig.
 function mathx.hash2(ix, iy, s)
-	return mathx.fract(sin(ix * 127.1 + iy * 311.7 + s * 19.19) * 43758.5453)
+	local x = ix * 12.9898 + iy * 78.233 + s * 37.719
+	return x - floor(x)
 end
 
 -- Unit vector and length. Degenerate input becomes (1, 0).

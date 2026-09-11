@@ -34,6 +34,33 @@ local function speed_across(base, st, across, width_scale)
 	return base * width_scale * clamp(bend, 0.32, 1.85) * (0.52 + 0.48 * mid) * skin * drag * widen
 end
 
+-- Flat scalar form. Same math, no station table. depth_hint
+-- skips one depth eval for the neighbour lane lookups.
+local function speed_across_st(base, kappa, width_scale, thalweg, pool, bed_scale, hw, dhw, across, depth_hint)
+	local k = kappa * 5
+	if k < -0.6 then k = -0.6 elseif k > 0.6 then k = 0.6 end
+	local bend = 1 + k * (across - 0.5) * 2
+	if bend < 0.32 then bend = 0.32 elseif bend > 1.85 then bend = 1.85 end
+	local d = across - 0.5
+	local mid = 1 - d * d * 1.35
+	local depth = depth_hint
+	if not depth then
+		local edge0 = across < 0.5 and across or 1 - across
+		local shelf0 = edge0 / 0.15
+		if shelf0 > 1 then shelf0 = 1 end
+		local dtw = across - thalweg
+		local trough0 = 1 - dtw * dtw * 5.2
+		if trough0 < 0 then trough0 = 0 elseif trough0 > 1 then trough0 = 1 end
+		depth = bed_scale * (3 + (7 + 26 * pool) * trough0 * shelf0)
+	end
+	local skin = (DEPTH_REF / (depth < 3 and 3 or depth)) ^ 0.42
+	local edge = across < 0.5 and across or 1 - across
+	local drag = 1 - 0.40 * (edge > 0.14 and 0 or (0.14 - edge) / 0.14)
+	local w = dhw * 2.2
+	if w < -0.15 then w = -0.15 elseif w > 0.30 then w = 0.30 end
+	return base * width_scale * bend * (0.52 + 0.48 * mid) * skin * drag * (1 - w)
+end
+
 -- Seeded eddy clusters: a fraction of the beat is turbulent. Each
 -- cluster has its own strength, drift rate, and phase so the pattern
 -- is unique per river seed.
@@ -162,47 +189,76 @@ function flow.speed(field, st, across)
 	return speed_across(field.base_speed, st, across, st.width_scale)
 end
 
--- Full field sample. With a time argument the heading and speed pick
--- up the eddy field; without it the sample is pure geometry, which
--- habitat scoring and the player pose rely on.
-function flow.sample(field, t, across, time)
+-- Full field sample into out. No alloc. Hot path for fish,
+-- flow map bakes, and debug arrows. Returns out.
+function flow.sample_into(field, t, across, time, out)
 	across = clamp(across, 0, 1)
 	local a, b, u = pair(field, t)
-	local st = blend_station(a, b, u)
-	local tx, ty = norm(lerp(a.tx, b.tx, u), lerp(a.ty, b.ty, u))
+	local iu = 1 - u
+	local kappa = a.kappa * iu + b.kappa * u
+	local width_scale = a.width_scale * iu + b.width_scale * u
+	local thalweg = a.thalweg * iu + b.thalweg * u
+	local pool = a.pool * iu + b.pool * u
+	local bed_scale = a.bed_scale * iu + b.bed_scale * u
+	local hw = a.hw * iu + b.hw * u
+	local dhw = a.dhw * iu + b.dhw * u
+	local tx, ty = norm(a.tx * iu + b.tx * u, a.ty * iu + b.ty * u)
 	local px, py = -ty, tx
-	local depth = flow.depth(st, across)
-	local speed = speed_across(field.base_speed, st, across, st.width_scale)
-	local s_in = speed_across(field.base_speed, st, clamp(across - 0.08, 0, 1), st.width_scale)
-	local s_out = speed_across(field.base_speed, st, clamp(across + 0.08, 0, 1), st.width_scale)
-	local eddy, spin = 0, 0
-	local wake, shade = 0, 0
+	local edge = across < 0.5 and across or 1 - across
+	local shelf = edge / 0.15
+	if shelf > 1 then shelf = 1 end
+	local dtw = across - thalweg
+	local trough = 1 - dtw * dtw * 5.2
+	if trough < 0 then trough = 0 elseif trough > 1 then trough = 1 end
+	local depth = bed_scale * (3 + (7 + 26 * pool) * trough * shelf)
+	local speed = speed_across_st(field.base_speed, kappa, width_scale, thalweg, pool, bed_scale, hw, dhw, across, depth)
+	local s_in = speed_across_st(field.base_speed, kappa, width_scale, thalweg, pool, bed_scale, hw, dhw, across - 0.08 < 0 and 0 or across - 0.08, nil)
+	local s_out = speed_across_st(field.base_speed, kappa, width_scale, thalweg, pool, bed_scale, hw, dhw, across + 0.08 > 1 and 1 or across + 0.08, nil)
+	local eddy, spin, wake, shade = 0, 0, 0, 0
 	if field.obstacles then
 		wake, shade = obstacles_at(field.obstacles, t, across)
 		speed = speed * (1 - 0.5 * wake)
 	end
 	if time then
-		eddy, spin = turbulence(field, t, across, st.kappa, time)
+		eddy, spin = turbulence(field, t, across, kappa, time)
 		eddy = eddy + wake * 0.3
 		spin = spin + wake * 0.28 * math.sin(time * 3.1 + t * 13.0)
 		speed = speed * (1 + eddy * 0.12)
 	end
-	if spin ~= 0 then -- rotate heading into the swirl, keep the pose fixed
+	if spin ~= 0 then
 		local c, s = math.cos(spin), math.sin(spin)
-		tx, ty = tx * c - ty * s, tx * s + ty * c
+		local ntx = tx * c - ty * s
+		ty = tx * s + ty * c
+		tx = ntx
 	end
-	return {
-		x = lerp(a.x, b.x, u) + px * st.hw * (across * 2 - 1),
-		y = lerp(a.y, b.y, u) + py * st.hw * (across * 2 - 1),
-		tx = tx, ty = ty, px = px, py = py,
-		t = t, across = across, hw = st.hw, kappa = st.kappa,
-		speed = speed, depth = depth, depth_n = clamp(depth / 36, 0, 1),
-		pressure = 1 / (0.18 + speed), -- Bernoulli-like: slow water reads as high pressure
-		seam = math.abs(s_out - s_in), -- shear between neighbouring lanes
-		pool = st.pool,
-		eddy = eddy,
-		shade = shade,
-	}
+	out = out or {}
+	out.x = (a.x * iu + b.x * u) + px * hw * (across * 2 - 1)
+	out.y = (a.y * iu + b.y * u) + py * hw * (across * 2 - 1)
+	out.tx = tx
+	out.ty = ty
+	out.px = px
+	out.py = py
+	out.t = t
+	out.across = across
+	out.hw = hw
+	out.kappa = kappa
+	out.speed = speed
+	out.depth = depth
+	out.depth_n = depth / 36 < 0 and 0 or (depth / 36 > 1 and 1 or depth / 36)
+	out.pressure = 1 / (0.18 + speed)
+	out.seam = s_out > s_in and s_out - s_in or s_in - s_out
+	out.pool = pool
+	out.eddy = eddy
+	out.shade = shade
+	out.occ = out.occ or 0
+	return out
+end
+
+-- Full field sample. With a time argument the heading and speed pick
+-- up the eddy field; without it the sample is pure geometry, which
+-- habitat scoring and the player pose rely on.
+function flow.sample(field, t, across, time)
+	return flow.sample_into(field, t, across, time, nil)
 end
 
 -- How good a hold is: slack water next to a seam. Fish use shear

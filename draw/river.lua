@@ -1,7 +1,7 @@
 local flow = require "draw.flow"
 local palette = require "draw.palette"
 local obstacle = require "draw.obstacle"
-local foam = require "draw.foam"
+local splash_mod = require "draw.splash"
 local mathx = require "lib.math"
 local gfx = require "lib.gfx"
 
@@ -14,32 +14,32 @@ local lerp, clamp, mix3, hash2 = mathx.lerp, mathx.clamp, mathx.mix3, mathx.hash
 local tile_noise, tangent, TAU = mathx.tile_noise, mathx.tangent, mathx.TAU
 local vert, strip = gfx.vert, gfx.strip
 
--- Repeating dirt/grass grain for the floodplain.
+-- Soft low contrast grain. Reads as soil, not tile.
 local function grain_tile(seed)
 	return gfx.image(TILE, function(x, y)
 		local n = 0.14 * tile_noise(x / 32, y / 32, 8, seed)
 		    + 0.34 * tile_noise(x / 8, y / 8, 32, seed + 3)
 		    + 0.30 * tile_noise(x / 4, y / 4, 64, seed + 7)
 		    + 0.22 * tile_noise(x / 2, y / 2, 128, seed + 13)
-		n = n + (hash2(x, y, seed + 11) - 0.5) * 0.14
-		if hash2(x, y, seed + 23) > 0.982 then
-			n = n * 0.70
+		n = n + (hash2(x, y, seed + 11) - 0.5) * 0.10
+		if hash2(x, y, seed + 23) > 0.986 then
+			n = n * 0.82
 		end
-		return clamp(0.70 + 0.30 * n, 0.58, 1)
+		return clamp(0.82 + 0.18 * n, 0.72, 1)
 	end)
 end
 
--- Streaky pebble grain for bank strips.
+-- Soft pebble grain for bank strips. Low contrast on purpose.
 local function bank_tile(seed)
 	return gfx.image(BANK_TILE, function(x, y)
 		local n = 0.50 * tile_noise(x / 8, y / 16, 16, seed) + 0.30 * tile_noise(x / 16, y / 8, 8, seed + 5)
-		n = n + (hash2(x, y, seed + 11) - 0.5) * 0.16
-		if hash2(x, y, seed + 29) > 0.96 then
-			n = n * 0.55
-		elseif hash2(x, y, seed + 31) > 0.93 then
-			n = n * 0.78
+		n = n + (hash2(x, y, seed + 11) - 0.5) * 0.10
+		if hash2(x, y, seed + 29) > 0.965 then
+			n = n * 0.72
+		elseif hash2(x, y, seed + 31) > 0.94 then
+			n = n * 0.86
 		end
-		return clamp(0.55 + 0.45 * n, 0.40, 1)
+		return clamp(0.80 + 0.20 * n, 0.70, 1)
 	end)
 end
 
@@ -54,7 +54,8 @@ local function scatter(rng, n, w, h, rx, ry, color, alpha)
 	end
 end
 
--- Bake floodplain grain plus clutter into a canvas.
+-- Bake floodplain tone. Few large soft washes, sparse tufts,
+-- a handful of stones. No confetti on the grass.
 local function ground_canvas(seed, width, height, char)
 	local grain = grain_tile(seed)
 	local quad = love.graphics.newQuad(0, 0, width, height, TILE, TILE)
@@ -63,16 +64,16 @@ local function ground_canvas(seed, width, height, char)
 	canvas:renderTo(function()
 		love.graphics.setColor(char.ground)
 		love.graphics.draw(grain, quad, 0, 0)
-		scatter(rng, 28, width, height, { 18, 34 }, { 10, 22 }, function(r)
+		scatter(rng, 10, width, height, { 26, 40 }, { 16, 30 }, function(r)
 			return mix3(char.ground, mix3(palette.PEAT_SOIL, palette.GRASS, r:random()),
-				0.35 + r:random() * 0.4)
-		end, { 0.18, 0.12 })
-		scatter(rng, 140, width, height, { 3, 11 }, { 2, 7 }, function(r)
-			return mix3(char.ground, mix3(palette.MOSS, palette.STONE, r:random()), 0.25 + r:random() * 0.5)
-		end, { 0.22, 0.20 })
-		scatter(rng, 55, width, height, { 1.2, 3.2 }, { 0.9, 2.2 }, function()
+				0.25 + r:random() * 0.3)
+		end, { 0.10, 0.08 })
+		scatter(rng, 24, width, height, { 4, 9 }, { 3, 6 }, function(r)
+			return mix3(char.ground, mix3(palette.MOSS, palette.STONE, r:random()), 0.2 + r:random() * 0.35)
+		end, { 0.14, 0.10 })
+		scatter(rng, 10, width, height, { 1.5, 3.0 }, { 1.0, 2.0 }, function()
 			return palette.STONE
-		end, { 0.28, 0.25 })
+		end, { 0.20, 0.12 })
 		love.graphics.setColor(1, 1, 1, 1)
 	end)
 	grain:release()
@@ -148,7 +149,9 @@ local function water_vert(p, px, py, across, char, field)
 	return v
 end
 
--- Bank, wet lip, and water rails at every station.
+-- Bank, wet lip, and water rails at every station. Outer bank
+-- verts carry zero alpha so the strip feathers into the ground.
+-- Per station tone noise breaks the parallel band look.
 local function rails(pts, char, field)
 	local bank_lo, bank_li, bank_ri, bank_ro = {}, {}, {}, {}
 	local wet_li, wet_lo, wet_ri, wet_ro = {}, {}, {}, {}
@@ -158,22 +161,25 @@ local function rails(pts, char, field)
 		p.i = i
 		local tx, ty = tangent(pts, i)
 		local px, py = -ty, tx
-		local lip = WET_LIP * (0.85 + 0.25 * math.sin(p.t * 11 * math.pi + char.p2))
+		local wob = tile_noise(p.t * 36, 2.5, 32, char.p1 * 10) - 0.5
+		local wob2 = tile_noise(p.t * 36, 7.5, 32, char.p2 * 10) - 0.5
+		local lip = WET_LIP * (0.85 + 0.25 * math.sin(p.t * 11 * math.pi + char.p2) + wob * 0.5)
 		local wet_in, wet_out = p.hw - WATER_INSET, p.hw + lip
-		local left = p.hw + ragged(p.t, char.bank_extra, char.p1, char.p3)
-		local right = p.hw + ragged(p.t, char.bank_extra, char.p2, char.p1)
+		local left = p.hw + ragged(p.t, char.bank_extra, char.p1, char.p3) + wob * 10
+		local right = p.hw + ragged(p.t, char.bank_extra, char.p2, char.p1) + wob2 * 10
 		local shade = 0.82 + 0.18 * math.sin(p.t * 19 * math.pi + char.p3)
-		local inner, outer = mix3(char.gravel, char.wet, 0.35 + 0.25 * shade),
-		    mix3(char.bank, char.gravel, 0.15 * (1 - shade))
+		local tone = tile_noise(p.t * 22, 1.5, 32, char.p2 * 20) - 0.5
+		local inner, outer = mix3(char.gravel, char.wet, 0.35 + 0.25 * shade + tone * 0.3),
+		    mix3(char.bank, char.gravel, 0.15 * (1 - shade) + tone * 0.2)
 		local uv = p.t * 10
-		bank_li[i] = vert(p.x - px * wet_out, p.y - py * wet_out, uv, 0, inner)
-		bank_lo[i] = vert(p.x - px * left, p.y - py * left, uv, 1, outer)
-		bank_ri[i] = vert(p.x + px * wet_out, p.y + py * wet_out, uv, 0, inner)
-		bank_ro[i] = vert(p.x + px * right, p.y + py * right, uv, 1, outer)
-		wet_li[i] = vert(p.x - px * wet_in, p.y - py * wet_in, uv, 0, char.wet)
-		wet_lo[i] = vert(p.x - px * wet_out, p.y - py * wet_out, uv, 1, inner)
-		wet_ri[i] = vert(p.x + px * wet_in, p.y + py * wet_in, uv, 0, char.wet)
-		wet_ro[i] = vert(p.x + px * wet_out, p.y + py * wet_out, uv, 1, inner)
+		bank_li[i] = vert(p.x - px * wet_out, p.y - py * wet_out, uv, 0, inner, 1)
+		bank_lo[i] = vert(p.x - px * left, p.y - py * left, uv, 1, outer, 0)
+		bank_ri[i] = vert(p.x + px * wet_out, p.y + py * wet_out, uv, 0, inner, 1)
+		bank_ro[i] = vert(p.x + px * right, p.y + py * right, uv, 1, outer, 0)
+		wet_li[i] = vert(p.x - px * wet_in, p.y - py * wet_in, uv, 0, char.wet, 0.9)
+		wet_lo[i] = vert(p.x - px * wet_out, p.y - py * wet_out, uv, 1, inner, 0)
+		wet_ri[i] = vert(p.x + px * wet_in, p.y + py * wet_in, uv, 0, char.wet, 0.9)
+		wet_ro[i] = vert(p.x + px * wet_out, p.y + py * wet_out, uv, 1, inner, 0)
 		water_l[i] = water_vert(p, px, py, 0, char, field)
 		water_r[i] = water_vert(p, px, py, 1, char, field)
 	end
@@ -246,11 +252,11 @@ function river.new(opts)
 		time = 0,
 		show_flow = false,
 		shader = gfx.shader("draw/water.glsl"),
-		foam = foam.new(),
 		flow_tex = love.graphics.newCanvas(64, 36),
 		bed_exposure = 1.4,
 		water_sheen = 0.5,
-		foam_mult = 0.2,
+		flow_dirty = true,
+		splash = splash_mod.new(),
 	}, river)
 	self:rebuild()
 	return self
@@ -267,7 +273,6 @@ function river:rebuild()
 	self.char, self.flow, self.channel = char, field, channel
 	local x0, y0, x1, y1 = pts[1].x, pts[1].y, pts[#pts].x, pts[#pts].y
 	self.len_inv = 1 / math.max(1, math.sqrt((x1 - x0) ^ 2 + (y1 - y0) ^ 2))
-	self.foam:reset()
 	self.ground = ground_canvas(self.seed, self.width, self.height, char)
 	self.bank_tex = bank_tile(self.seed)
 	self.bank_l = strip(channel.bank_lo, channel.bank_li)
@@ -279,6 +284,9 @@ function river:rebuild()
 	self.bank_r:setTexture(self.bank_tex)
 	self.wet_l:setTexture(self.bank_tex)
 	self.wet_r:setTexture(self.bank_tex)
+	self.splash:reset()
+	refresh_flow_map(self)
+	self.flow_dirty = false
 end
 
 -- Replace the seed and rebuild.
@@ -293,17 +301,30 @@ function river:resize(width, height)
 	self:rebuild()
 end
 
--- Advance water animation and drift the foam.
+-- Mark the flow map stale after a current knob change.
+function river:touch_flow()
+	self.flow_dirty = true
+end
+
+-- Advance water animation and splash. Flow map bakes on demand.
 function river:update(dt)
 	self.time = self.time + dt
-	refresh_flow_map(self)
-	self.foam:update(dt, self)
+	if self.flow_dirty then
+		refresh_flow_map(self)
+		self.flow_dirty = false
+	end
+	self.splash:update(dt)
 end
 
 -- Sample flow at parametric (t, across). Geometry only, used by
 -- habitat scoring and the shore pose.
 function river:sample(t, across)
 	return flow.sample(self.flow, t, across)
+end
+
+-- Reuse scratch. No alloc in fish hot loops.
+function river:sample_into(t, across, time, out)
+	return flow.sample_into(self.flow, t, across, time, out)
 end
 
 -- Animated sample for entities: heading and speed pick up the eddies.
@@ -402,13 +423,17 @@ function river:draw_flow()
 	end
 end
 
--- Draw ground, banks, water, and optional flow overlay.
+-- Draw ground, banks, water, and optional flow overlay. Wet
+-- sits under the water edge so no hard rim lands on the film.
 function river:draw()
 	local char = self.char
 	love.graphics.setColor(1, 1, 1, 1)
 	love.graphics.draw(self.ground)
 	love.graphics.draw(self.bank_l)
 	love.graphics.draw(self.bank_r)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.draw(self.wet_l)
+	love.graphics.draw(self.wet_r)
 	self.shader:send("time", self.time)
 	self.shader:send("bed_color", char.bed)
 	self.shader:send("spot_color", char.spot)
@@ -421,11 +446,8 @@ function river:draw()
 	love.graphics.draw(self.water)
 	love.graphics.setShader()
 	love.graphics.setColor(1, 1, 1, 1)
-	love.graphics.draw(self.wet_l)
-	love.graphics.draw(self.wet_r)
-	-- Foam first so rocks always sit on top of the film.
-	self.foam:draw(self)
 	obstacle.draw(self.obstacles, self)
+	self.splash:draw()
 	draw_streaks(self.channel, self.time, char.flow_speed)
 	if self.show_flow then
 		self:draw_flow()

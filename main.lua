@@ -37,11 +37,11 @@ function love.load()
 			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
 			ctrl("current", "float",
 				function() return world.river.flow.base_speed / world.river.flow.base end,
-				function(v) world.river.flow.base_speed = world.river.flow.base * v end,
+				function(v) world.river.flow.base_speed = world.river.flow.base * v world.river:touch_flow() end,
 				{ min = 0.25, max = 3, step = 0.05 }),
 			ctrl("turbulence", "float",
 				function() return world.river.flow.turb_scale end,
-				function(v) world.river.flow.turb_scale = v end,
+				function(v) world.river.flow.turb_scale = v world.river:touch_flow() end,
 				{ min = 0, max = 1, step = 0.05 }),
 			ctrl("bed exposure", "float",
 				function() return world.river.bed_exposure end,
@@ -51,10 +51,6 @@ function love.load()
 				function() return world.river.water_sheen end,
 				function(v) world.river.water_sheen = v end,
 				{ min = 0, max = 1, step = 0.05 }),
-			ctrl("foam", "float",
-				function() return world.river.foam_mult end,
-				function(v) world.river.foam_mult = v end,
-				{ min = 0, max = 1.5, step = 0.1 }),
 			ctrl("show_flow", "bool", function() return world.river.show_flow end, function(v) world.river.show_flow = v end),
 			ctrl("show_fish", "bool", function() return world.show_fish end, function(v) world.show_fish = v end, { label = "fish tags" }),
 			ctrl("bed", "label", function()
@@ -64,11 +60,13 @@ function love.load()
 	})
 end
 
--- Step the sim unless paused.
+-- Step the sim unless paused. Clamp dt so a hitch never
+-- throws fish across the beat.
 function love.update(dt)
 	if world.paused then
 		return
 	end
+	if dt > 0.05 then dt = 0.05 end
 	dt = dt * world.time_scale
 	world.river:update(dt)
 	fish.update(world.fish, dt, world.river, nil)

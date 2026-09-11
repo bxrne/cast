@@ -3,5 +3,5 @@ return {
 	flow = require "draw.flow",
 	palette = require "draw.palette",
 	obstacle = require "draw.obstacle",
-	foam = require "draw.foam",
+	splash = require "draw.splash",
 }
