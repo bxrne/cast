@@ -213,6 +213,29 @@ local function draw_streaks(channel, time, speed)
 	end
 end
 
+-- Paint the live flow into a tiny canvas the water shader samples:
+-- R,G hold the heading, B the relative speed. The water mesh uv maps
+-- to parametric (t, across), so the field lines up with the shading.
+local function refresh_flow_map(river)
+	local tex = river.flow_tex
+	local w, h = tex:getDimensions()
+	love.graphics.push("all")
+	love.graphics.setCanvas(tex)
+	love.graphics.clear(0.5, 0.5, 0, 1) -- zero vector = no current
+	love.graphics.setBlendMode("replace")
+	for j = 0, h - 1 do
+		local across = (j + 0.5) / h
+		for i = 0, w - 1 do
+			local s = flow.sample(river.flow, (i + 0.5) / w, across, river.time)
+			local rel = mathx.clamp(s.speed / math.max(river.flow.base_speed, 0.01), 0, 1)
+			love.graphics.setColor(s.tx * 0.5 + 0.5, s.ty * 0.5 + 0.5, rel, 1)
+			love.graphics.points(i + 0.5, j + 0.5)
+		end
+	end
+	love.graphics.setCanvas()
+	love.graphics.pop()
+end
+
 -- Create a river scene for this window.
 function river.new(opts)
 	opts = opts or {}
@@ -224,6 +247,7 @@ function river.new(opts)
 		show_flow = false,
 		shader = gfx.shader("draw/water.glsl"),
 		foam = foam.new(),
+		flow_tex = love.graphics.newCanvas(64, 36),
 	}, river)
 	self:rebuild()
 	return self
@@ -269,6 +293,7 @@ end
 -- Advance water animation and drift the foam.
 function river:update(dt)
 	self.time = self.time + dt
+	refresh_flow_map(self)
 	self.foam:update(dt, self)
 end
 
@@ -318,9 +343,9 @@ function river:draw()
 	love.graphics.draw(self.bank_l)
 	love.graphics.draw(self.bank_r)
 	self.shader:send("time", self.time)
-	self.shader:send("speed", char.flow_speed)
 	self.shader:send("bed_color", char.bed)
 	self.shader:send("spot_color", char.spot)
+	self.shader:send("flow_tex", self.flow_tex)
 	love.graphics.setShader(self.shader)
 	love.graphics.draw(self.water)
 	love.graphics.setShader()

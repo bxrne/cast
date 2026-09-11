@@ -1,7 +1,7 @@
 extern number time;
-extern number speed;
 extern vec3 bed_color;
 extern vec3 spot_color;
+extern Image flow_tex;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
@@ -27,12 +27,25 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 screen) {
 	float along = uv.x;
 	float across = uv.y;
 	float depth = color.a; // 0 shallow (bed close) .. 1 deep
-	vec2 dir = vec2(along * 11.0 - time * speed, across * 2.4);
+
+	// Live flow from the field canvas: heading and relative speed drive
+	// the ripple so the water surface visibly runs with the current.
+	vec4 flow = texture2D(flow_tex, uv);
+	vec2 fdir = flow.xy * 2.0 - 1.0;
+	float fspeed = clamp(flow.b, 0.0, 1.0);
+	vec2 flowDir = length(fdir) > 0.01 ? normalize(fdir) : vec2(0.0, 1.0);
+	float flong = dot(uv, flowDir);
+	float fcross = dot(uv, vec2(-flowDir.y, flowDir.x));
+
+	// Ripple field advected downstream at the local current, strained
+	// across the flow so streaks read as lanes around the wakes.
+	vec2 dir = vec2(flong * 11.0 - time * (0.3 + 2.2 * fspeed), fcross * 2.2 + flong * 0.9);
 	float ripple = noise(dir);
 	float spec = pow(clamp(ripple, 0.0, 1.0), 26.0);
 
-	// Surface tint stays calm and bluish over the vertex colour.
-	vec3 water = mix(color.rgb, vec3(0.55, 0.72, 0.78), 0.30);
+	// Slow lanes behind rocks read slightly darker: a wake tint.
+	float wake = clamp(1.0 - fspeed * 1.5, 0.0, 0.5);
+	vec3 water = mix(color.rgb, vec3(0.55, 0.72, 0.78), 0.30) * (1.0 - 0.10 * wake);
 
 	// Bed detail: soft fbm grain tinted toward the spot colour. The
 	// contrast stays low so patches read as gravel, not hard blobs.
@@ -49,6 +62,6 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 screen) {
 	float shelf = clamp((1.0 - depth) * 2.0, 0.0, 1.0) * (0.5 + 0.5 * fbm(vec2(along * 8.0, across * 4.0)));
 	c += vec3(0.22, 0.28, 0.30) * shelf * 0.06;
 
-	c += spec * 0.05 * depth * vec3(0.70, 0.82, 0.88);
+	c += spec * (0.04 + 0.03 * fspeed) * depth * vec3(0.70, 0.82, 0.88);
 	return vec4(c, 1.0);
 }
