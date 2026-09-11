@@ -5,7 +5,8 @@ debug.__index = debug
 
 local PANEL_W, ROW_H, PAD = 280, 22, 12
 
--- Format a control value for the panel.
+-- Format a control value for the panel. Seed rows show the
+-- bed too, as num plus name.
 local function format_value(ctrl)
 	local v = ctrl.get()
 	if v == nil then
@@ -16,6 +17,15 @@ local function format_value(ctrl)
 	end
 	if ctrl.kind == "float" then
 		return string.format("%.2f", v)
+	end
+	if ctrl.kind == "seed" then
+		if ctrl.bed then
+			local ok, bed = pcall(ctrl.bed)
+			if ok and bed then
+				return string.format("%d (%s)", v, bed)
+			end
+		end
+		return tostring(v)
 	end
 	return tostring(v)
 end

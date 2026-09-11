@@ -32,7 +32,8 @@ function love.load()
 	spawn_entities()
 	dbg = debug_ui.new({
 		controls = {
-			ctrl("seed", "seed", function() return world.seed end, reseed, { min = 1, max = 999999 }),
+			ctrl("seed", "seed", function() return world.seed end, reseed,
+				{ min = 1, max = 24, bed = function() return world.river.char.bed_type.id end }),
 			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
 			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
 			ctrl("current", "float",
