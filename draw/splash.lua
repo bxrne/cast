@@ -65,7 +65,8 @@ function splash:dimple(x, y, r)
   push(self, 3, x, y, 0, 0, 1.1, 1, r or 4)
 end
 
--- Flying drop with velocity.
+-- Flying drop with velocity. Gravity form: vy += 260 * dt
+-- each step, so spray arcs and falls back to the film.
 function splash:drop(x, y, vx, vy, life, r)
   push(self, 2, x, y, vx, vy, life or 0.45, r or 1.6, r or 1.6)
 end

@@ -36,8 +36,9 @@ local SIZE_IDEAL = { brown = 0.6, rainbow = 0.5, brook = 0.2, cutthroat = 0.4, b
 
 local clamp = mathx.clamp
 
--- Weight each taxon for this water. Bed sets the base. Flow
--- and size pull toward taxa built for that beat.
+-- Weight each taxon for this water. Form: w = 0.15 + bed
+-- * (0.35 + 0.65 * (flow + size) / 2). Bed sets the base,
+-- flow and size pull toward taxa built for that beat.
 function species.weights(char)
 	local base = char.flow_speed or 1
 	local u_flow = clamp((base - 0.45) / 1.1, 0, 1)
@@ -67,8 +68,9 @@ function species.pick(weights, roll)
 	return species.list[#species.list]
 end
 
--- Copy a taxon tuned for this water. Clear fast water makes
--- fish wary and less surface prone. Never mutates the list.
+-- Copy a taxon tuned for this water. Stress form:
+-- s = |u_flow - tol| * 1.5, clamped 0..1. Clear fast water
+-- makes fish wary and less surface prone. Never mutates the list.
 function species.instantiate(spec, char, clarity)
 	local base = char.flow_speed or 1
 	local u_flow = clamp((base - 0.45) / 1.1, 0, 1)

@@ -67,8 +67,9 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 screen) {
 	float grain = fbm(vec2(along * 6.0, across * 3.0));
 	vec3 bed = mix(bed_color, spot_color, clamp(grain * 1.3 - 0.10, 0.0, 1.0) * 0.42);
 
-	// Bed exposure: strongest at the shallowest water, fading quickly
-	// with depth, scaled by the debug exposure knob.
+	// Bed exposure. Form: R = exp(-4.6 * d) * patch * expose,
+	// clamped 0..0.55. Strongest over the shallows, gone in
+	// the deep.
 	float patch = 0.55 + 0.60 * fbm(vec2(along * 3.6, across * 2.1) + 2.3);
 	float reveal = exp(-depth * 4.6) * patch * bed_exposure;
 	vec3 c = mix(water, bed, clamp(reveal, 0.0, 0.55));

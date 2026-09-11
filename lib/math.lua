@@ -30,7 +30,8 @@ function mathx.fract(x)
 	return x - floor(x)
 end
 
--- Deterministic 0..1 hash of up to three numbers. No sin in
+-- Deterministic 0..1 hash of up to three numbers. Form:
+-- fract(12.9898 * a + 78.233 * b + 37.719 * c). No sin in
 -- the hot path. Fract of a weighted sum is fast and stable.
 function mathx.hash01(a, b, c)
 	local x = a * 12.9898 + (b or 0) * 78.233 + (c or 0) * 37.719

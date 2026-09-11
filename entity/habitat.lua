@@ -12,7 +12,8 @@ function habitat.channel_across(across)
 	return clamp(across, ACROSS_LO, ACROSS_HI)
 end
 
--- Piecewise tent used by PHABSIM suitability curves.
+-- Piecewise tent. Form: SI = (x - lo) / (peak - lo) rising,
+-- (hi - x) / (hi - peak) falling, else 0.
 local function tent(x, lo, peak, hi)
 	if x <= lo or x >= hi or peak <= lo or hi <= peak then
 		return 0
@@ -51,7 +52,9 @@ local function si_cover(sample, spec)
 		+ 0.55 * shade * spec.cover_need, 0.04, 1)
 end
 
--- Hughes–Dill style net energy: drift in the next lane minus hold cost.
+-- Hughes-Dill style net energy. Form: E = (Vd / Vb)
+-- * exp(-1.35 * Vh / Vd) - 0.32 * (Vh / Vb)^3. Drift in the
+-- next lane minus hold cost cubed.
 function habitat.energy(sample, river, spec)
 	local base = river.flow.base_speed
 	local v_hold, v_drift = sample.speed, sample.speed
@@ -69,7 +72,9 @@ function habitat.energy(sample, river, spec)
 	return intake - cost
 end
 
--- Combined habitat score: geometric-mean HSI times normalised energy.
+-- Combined habitat score. Form: HSI = (SIv * SId * SIc)^(1/3),
+-- the geometric mean of velocity, depth, and cover indices,
+-- times normalised energy 0.4 + 0.6 * E.
 function habitat.score(sample, spec, river)
 	local base = river.flow.base_speed
 	local area = (1 - (sample.occ or 0) * 1.15)

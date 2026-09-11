@@ -319,9 +319,10 @@ local function segment(self, s, len, phase, slither, tail_amp, steady)
 	return along, lat, w
 end
 
--- Swim effort by activity. Freq scales beat, amp scales tail.
--- Holds barely move. Head stays still, tail ticks over.
--- Bursts go full tail driven.
+-- Swim effort by activity. Freq scales beat, amp scales tail,
+-- slide keeps slither, steady plants the head. Beat phase form:
+-- ph = clock * beat * freq * 2π + id. Holds tick near still,
+-- bursts run full tail driven.
 local ACT = {
 	rest = { freq = 0.25, amp = 0.10, slide = 0.4, steady = 1.0 },
 	drift = { freq = 0.4, amp = 0.16, slide = 0.5, steady = 1.0 },

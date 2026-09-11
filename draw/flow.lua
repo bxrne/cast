@@ -5,10 +5,9 @@ local lerp, clamp, norm, tangent = mathx.lerp, mathx.clamp, mathx.norm, mathx.ta
 local DEPTH_REF = 12
 local CLUSTERS = 13 -- eddy cluster count along the beat
 
--- Water column depth at a station. Cross-section from riffle-pool
--- geometry: the shelf ramps from the shore to the trough, the pool
--- deepens the thalweg, and bed_scale sets the overall depth.
--- Reference form: piecewise cross-section control.
+-- Water column depth. Form: D = S * (3 + (7 + 26 * pool)
+-- * trough * shelf). Shelf ramps from the shore, trough peaks
+-- at the thalweg, pool scales the contrast, S the bed.
 function flow.depth(st, across)
 	local edge = math.min(across, 1 - across)
 	local shelf = clamp(edge / 0.15, 0, 1)
@@ -16,7 +15,9 @@ function flow.depth(st, across)
 	return st.bed_scale * (3 + (7 + 26 * st.pool) * trough * shelf)
 end
 
--- Base channel speed. Terms, in order:
+-- Base channel speed. Form: V = Vb * Ws * bend * mid * skin
+-- * drag * widen. Skin follows V ~ D^-0.42, so shallow riffles
+-- run faster than deep pools. Terms, in order:
 --  bend  - superelevation puts the outside of a curve faster (kappa);
 --  mid   - the thalweg line runs faster than the margins (parabola);
 --  skin  - shallow riffles run faster than deep pools (V ~ D^-0.42);
@@ -261,8 +262,9 @@ function flow.sample(field, t, across, time)
 	return flow.sample_into(field, t, across, time, nil)
 end
 
--- How good a hold is: slack water next to a seam. Fish use shear
--- zones as energy refugia, so pressure and seam combine.
+-- How good a hold is: slack water next to a seam. Form:
+-- L = seam * P with P = 1 / (0.18 + V) and seam the shear
+-- |Vout - Vin| between neighbouring lanes.
 function flow.lie_score(sample)
 	return sample.seam * sample.pressure
 end

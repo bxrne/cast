@@ -108,7 +108,9 @@ local function character(seed, width, height)
 	return char
 end
 
--- Bottom-left to top-right centerline with meander.
+-- Bottom-left to top-right centerline. Form: wobble = m1
+-- * sin(2.15t + p1) + 0.32 * m1 * sin(5.05t + p2) + 0.10 * m1
+-- * sin(9.4t + p3), offset along the normal.
 local function centerline(char, width, height)
 	local x0, y0, x1, y1 = -20, height + 8, width + 20, -8
 	local dx, dy = mathx.norm(x1 - x0, y1 - y0)
@@ -219,9 +221,11 @@ local function draw_streaks(channel, time, speed)
 	end
 end
 
--- Paint the live flow into a tiny canvas the water shader samples:
--- R,G hold the heading, B the relative speed. The water mesh uv maps
--- to parametric (t, across), so the field lines up with the shading.
+-- Paint the static flow into a tiny canvas the water shader
+-- samples. Form per texel: R,G = heading * 0.5 + 0.5,
+-- B = V / Vb clamped 0..1. The water mesh uv maps to
+-- parametric (t, across), so the field lines up with shading.
+-- Baked on rebuild and knob touch, never per frame.
 local function refresh_flow_map(river)
 	local tex = river.flow_tex
 	local w, h = tex:getDimensions()
