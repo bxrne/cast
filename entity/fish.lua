@@ -37,6 +37,9 @@ local function due_to_rise(self)
 	if self.phase ~= "film" or self.column < 0.72 then
 		return false
 	end
+	if (self.foam_n or 0) > 0.45 then -- no sipping in white water
+		return false
+	end
 	if not self.at_lie or self.hold_time < self.period then
 		return false
 	end
@@ -214,6 +217,7 @@ function fish.update(list, dt, river, player)
 		local self = list[i]
 		self.clock = self.clock + dt
 		self.phase = mind.phase(self)
+		self.foam_n = river.foam and river.foam:density(self.x, self.y) or 0
 		bt.tick(self.tree, { fish = self, river = river, dt = dt, player = player, list = list })
 		mind.approach_column(self, mind.column_target(self, self.phase), dt)
 		sync_pose(self, river)
@@ -223,8 +227,11 @@ function fish.update(list, dt, river, player)
 	end
 end
 
--- Draw deep fish first. Size and opacity follow column height.
-function fish.draw(list)
+-- Draw deep fish first. Visibility follows water clarity, column
+-- height, and the feed phase; only a rising fish shows on the film.
+function fish.draw(list, river)
+	local clar = river and mind.clarity(river) or 0.5
+	local deep = river and river.char.water_deep or { 0.10, 0.20, 0.30 }
 	local order = {}
 	for i = 1, #list do
 		order[i] = list[i]
@@ -236,37 +243,72 @@ function fish.draw(list)
 		local self = order[i]
 		local col = self.column
 		local len = self.length * 0.42 * lerp(0.58, 1.12, col)
-		local lift, alpha = 0, lerp(0.32, 1, col)
+		local lift, vis = 0, math.max(0.04, col ^ 1.4 * (0.2 + 0.8 * clar))
 		if self.surface and col > 0.7 then
 			local u = self.surface.t / self.surface.duration
 			local arch = math.sin(u * math.pi)
 			lift = -self.surface.height * arch
+			vis = 0.95
 			love.graphics.setColor(0.78, 0.84, 0.80, 0.22 * arch)
 			love.graphics.ellipse("line", self.x, self.y, self.surface.ring * (0.4 + 0.6 * u), self.surface.ring * 0.35 * (0.4 + 0.6 * u))
 		end
-		local body = mix3(self.species.color, { 0.08, 0.12, 0.16 }, 1 - col)
-		local stripe = mix3(self.species.stripe, { 0.12, 0.14, 0.16 }, 1 - col)
+		-- Deep fish sink into the water colour; surface fish keep colour.
+		local sink = (1 - col) * 0.8
+		local body = mix3(self.species.color, deep, sink)
+		local stripe = mix3(self.species.stripe, deep, sink)
 		love.graphics.push()
 		love.graphics.translate(self.x, self.y + lift)
 		love.graphics.rotate(math.atan2(self.hy, self.hx))
-		love.graphics.setColor(body[1], body[2], body[3], alpha)
+		love.graphics.setColor(body[1], body[2], body[3], vis)
 		love.graphics.ellipse("fill", 0, 0, len * 0.5, len * 0.16)
-		love.graphics.setColor(stripe[1], stripe[2], stripe[3], alpha)
+		love.graphics.setColor(stripe[1], stripe[2], stripe[3], vis)
 		love.graphics.ellipse("fill", -len * 0.02, 0, len * 0.28, len * 0.07)
 		love.graphics.pop()
 	end
 end
 
--- Labels for each trout: species, feed phase, and column.
+-- Feed-phase tint used in the tag underline.
+local PHASE_TINT = {
+	rest = { 0.62, 0.66, 0.56 },
+	nymph = { 0.42, 0.64, 0.74 },
+	emerge = { 0.56, 0.76, 0.62 },
+	film = { 0.94, 0.80, 0.50 },
+}
+
+-- Column-depth meter: a thin bar with a marker at the fish height.
+local function depth_meter(x, y, column)
+	love.graphics.setColor(0.86, 0.92, 0.86, 0.30)
+	love.graphics.setLineWidth(1)
+	love.graphics.line(x, y - 1, x, y + 13)
+	love.graphics.setColor(0.86, 0.92, 0.86, 0.85)
+	local my = y + 12 - 12 * column
+	love.graphics.circle("fill", x, my, 2.2, 8)
+end
+
+-- Tags for each trout: species dot, phase tint, and column height.
 function fish.draw_indicators(list)
+	love.graphics.push("all")
 	for i = 1, #list do
 		local self = list[i]
-		local label = string.format("%s  %s  %.0f%%", self.species.id, self.phase, self.column * 100)
-		love.graphics.setColor(0.10, 0.12, 0.08, 0.7)
-		love.graphics.rectangle("fill", self.x + 8, self.y - 12, 6 * #label + 4, 14, 2, 2)
-		love.graphics.setColor(0.90, 0.86, 0.68)
-		love.graphics.print(label, self.x + 10, self.y - 12)
+		local label = string.format("%-7s %s %3.0f%%", self.species.id, self.phase, self.column * 100)
+		local tw = love.graphics.getFont():getWidth(label)
+		local w, h = tw + 30, 16
+		local x, y = math.floor(self.x + 9), math.floor(self.y - 12)
+		love.graphics.setColor(0.06, 0.07, 0.05, 0.72)
+		love.graphics.rectangle("fill", x, y, w, h, 4, 4)
+		love.graphics.setColor(1, 1, 1, 0.12)
+		love.graphics.rectangle("line", x, y, w, h, 4, 4)
+		local c = self.species.color
+		love.graphics.setColor(c[1], c[2], c[3], 0.95)
+		love.graphics.circle("fill", x + 9, y + 8, 3.4, 8)
+		local tint = PHASE_TINT[self.phase] or { 0.8, 0.8, 0.7 }
+		love.graphics.setColor(tint[1], tint[2], tint[3], 0.9)
+		love.graphics.rectangle("fill", x + 15, y + h - 2, w - 30, 2, 1, 1)
+		love.graphics.setColor(0.90, 0.88, 0.72, 0.97)
+		love.graphics.print(label, x + 17, y + 2)
+		depth_meter(x + w - 4, y + 2, self.column)
 	end
+	love.graphics.pop()
 end
 
 return fish
