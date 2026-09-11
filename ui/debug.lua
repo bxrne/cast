@@ -124,7 +124,7 @@ function debug:draw()
 
 	local fy = y + h - PAD - ROW_H
 	love.graphics.setColor(0.50, 0.49, 0.38)
-	love.graphics.print("up/down  left/right  R next seed", x + PAD, fy)
+	love.graphics.print("arrows adjust   R seed   WASD walk", x + PAD, fy)
 	love.graphics.pop()
 end
 
