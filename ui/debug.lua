@@ -8,6 +8,9 @@ local PANEL_W, ROW_H, PAD = 280, 22, 12
 -- Format a control value for the panel.
 local function format_value(ctrl)
 	local v = ctrl.get()
+	if v == nil then
+		return "?"
+	end
 	if ctrl.kind == "bool" then
 		return v and "on" or "off"
 	end
@@ -36,6 +39,10 @@ local function nudge(ctrl, dir)
 	end
 	if ctrl.max then
 		v = math.min(ctrl.max, v)
+	end
+	-- Poisons from NaN or infinity never reach the sim: keep the old value.
+	if not (v == v) or v == math.huge or v == -math.huge then
+		return
 	end
 	ctrl.set(v)
 end
@@ -111,7 +118,7 @@ function debug:draw()
 			love.graphics.rectangle("fill", x + 6, cy - 3, PANEL_W - 12, ROW_H - 2, 2, 2)
 		end
 		love.graphics.setColor(0.78, 0.76, 0.62)
-		love.graphics.print(controls[i].label, x + PAD, cy)
+		love.graphics.print(controls[i].label or controls[i].id or "?", x + PAD, cy)
 		love.graphics.printf(format_value(controls[i]), x + PAD, cy, PANEL_W - PAD * 2, "right")
 	end
 	love.graphics.setColor(0.50, 0.49, 0.38)

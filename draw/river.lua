@@ -248,6 +248,9 @@ function river.new(opts)
 		shader = gfx.shader("draw/water.glsl"),
 		foam = foam.new(),
 		flow_tex = love.graphics.newCanvas(64, 36),
+		bed_exposure = 1,
+		water_sheen = 0.5,
+		foam_mult = 1,
 	}, river)
 	self:rebuild()
 	return self
@@ -315,9 +318,12 @@ end
 
 -- Draw velocity arrows for the debug overlay. Lives on top of the
 -- eddy field and adds a light noise wobble so the indicators move.
+-- Colour: deep blue for slow lanes, bright aqua for fast water, and
+-- a warm amber cast over turbulent eddies.
 function river:draw_flow()
 	local n_t, n_a = 22, 7
 	love.graphics.setLineWidth(1.5)
+	local base = math.max(self.flow.base_speed, 0.01)
 	for i = 1, n_t do
 		local t = (i - 0.5) / n_t
 		for j = 1, n_a do
@@ -325,11 +331,17 @@ function river:draw_flow()
 			local s = flow.sample(self.flow, t, across, self.time)
 			local nse = 0.10 * math.sin(self.time * 2.6 + t * 41 + across * 29)
 			    + 0.07 * math.sin(self.time * 4.1 + t * 83 + across * 57)
-			local k = s.speed / self.flow.base_speed
-			love.graphics.setColor(0.2 + k * 0.6, 0.55, 0.85 - k * 0.4, 0.75)
-			local tip = 10 + (s.speed + nse * 4) * 14
-			local c, sn = math.cos(nse), math.sin(nse)
-			local ex, ey = s.tx * c - s.ty * sn, s.tx * sn + s.ty * c
+			local k = clamp(s.speed / base, 0, 1)
+			local fast = clamp((k - 0.3) / 0.7, 0, 1)
+			local eddy = clamp(math.abs(s.eddy) * 1.3, 0, 1)
+			local slow = { 0.18, 0.36, 0.75 }
+			local fleet = { 0.28, 0.86, 0.82 }
+			local hot = { 0.95, 0.55, 0.25 }
+			local c = mix3(mix3(slow, fleet, fast), hot, eddy * 0.75)
+			love.graphics.setColor(c[1], c[2], c[3], 0.82)
+			local tip = 8 + s.speed * 30 + (0.4 + eddy * 0.6) * nse * 5
+			local cth, sn = math.cos(nse), math.sin(nse)
+			local ex, ey = s.tx * cth - s.ty * sn, s.tx * sn + s.ty * cth
 			love.graphics.line(s.x, s.y, s.x + ex * tip, s.y + ey * tip)
 		end
 	end
@@ -345,6 +357,10 @@ function river:draw()
 	self.shader:send("time", self.time)
 	self.shader:send("bed_color", char.bed)
 	self.shader:send("spot_color", char.spot)
+	self.shader:send("water_color", char.water_mid)
+	self.shader:send("deep_color", char.water_deep)
+	self.shader:send("bed_exposure", self.bed_exposure)
+	self.shader:send("water_sheen", self.water_sheen)
 	self.shader:send("flow_tex", self.flow_tex)
 	love.graphics.setShader(self.shader)
 	love.graphics.draw(self.water)

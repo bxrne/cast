@@ -67,7 +67,7 @@ local function turbulence(field, t, across, kappa, time)
 	local sway = math.sin(time * c.rate + c.phase + u * 6.283)
 	local near_bank = 0.45 + 1.15 * math.min(across, 1 - across)
 	local sharp = 0.6 + math.min(1, math.abs(kappa) * 14)
-	local amt = c.strength * pulse * sway * near_bank * sharp
+	local amt = c.strength * field.turb_scale * pulse * sway * near_bank * sharp
 	return math.abs(amt), amt * 0.32
 end
 
@@ -102,7 +102,7 @@ function flow.build(pts, base_speed, bed, seed, obstacles)
 			bed_scale = bed.depth_scale,
 		}
 	end
-	local field = { stations = stations, base_speed = base_speed, bed = bed }
+	local field = { stations = stations, base_speed = base_speed, base = base_speed, turb_scale = 1, bed = bed }
 	field.turbulent = seed and build_clusters(seed, CLUSTERS) or nil
 	field.obstacles = obstacles or nil
 	return field

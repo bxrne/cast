@@ -5,7 +5,6 @@ local debug_ui = require "ui.debug"
 local fish = require "entity.fish"
 
 local world, dbg
-local shot_taken = false
 
 -- Spawn the seeded school for the current river.
 local function spawn_entities()
@@ -36,6 +35,26 @@ function love.load()
 			ctrl("seed", "seed", function() return world.seed end, reseed, { min = 1, max = 999999 }),
 			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
 			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
+			ctrl("current", "float",
+				function() return world.river.flow.base_speed / world.river.flow.base end,
+				function(v) world.river.flow.base_speed = world.river.flow.base * v end,
+				{ min = 0.25, max = 3, step = 0.05 }),
+			ctrl("turbulence", "float",
+				function() return world.river.flow.turb_scale end,
+				function(v) world.river.flow.turb_scale = v end,
+				{ min = 0, max = 2, step = 0.1 }),
+			ctrl("bed exposure", "float",
+				function() return world.river.bed_exposure end,
+				function(v) world.river.bed_exposure = v end,
+				{ min = 0.2, max = 1.4, step = 0.05 }),
+			ctrl("water sheen", "float",
+				function() return world.river.water_sheen end,
+				function(v) world.river.water_sheen = v end,
+				{ min = 0, max = 1, step = 0.05 }),
+			ctrl("foam", "float",
+				function() return world.river.foam_mult end,
+				function(v) world.river.foam_mult = v end,
+				{ min = 0, max = 1.5, step = 0.1 }),
 			ctrl("show_flow", "bool", function() return world.river.show_flow end, function(v) world.river.show_flow = v end),
 			ctrl("show_fish", "bool", function() return world.show_fish end, function(v) world.show_fish = v end, { label = "fish tags" }),
 			ctrl("bed", "label", function()

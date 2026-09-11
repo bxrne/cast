@@ -46,15 +46,19 @@ end
 -- Streamwise foam trace behind a source rock. Each point follows the
 -- live flow heading (eddies included), so the band is a real streamline
 -- of the wake: it curves with the water, widens as the wake spreads,
--- and dissolves downstream. Drawn under the rocks.
+-- and dissolves downstream. Warm cream, drawn under the rocks.
 local function draw_trace(river, o, q)
 	local span = o.wt * 3.4
 	local hw = river.char.water_half
+	local mult = river.foam_mult or 1
 	local top, bottom = {}, {}
 	for i = 0, STEPS do
 		local u = i / STEPS
 		local s = river:sample_live(o.t + u * span, o.across)
-		local width = o.dw * (0.42 + 1.05 * u * (1.0 - 0.42 * u))
+		-- Organic edge: the wake breathes on its own noise, so the
+		-- trace never reads as a smooth tube.
+		local breathe = 0.80 + 0.35 * math.sin(o.t * 173.0 + u * 37.0 + river.time * 1.9)
+		local width = o.dw * (0.42 + 1.05 * u * (1.0 - 0.42 * u)) * breathe
 		local px, py = -s.ty, s.tx
 		local wx, wy = px * width * hw * 2, py * width * hw * 2
 		top[i + 1] = { s.x + wx, s.y + wy }
@@ -74,7 +78,8 @@ local function draw_trace(river, o, q)
 			pts[#pts + 1] = bottom[i + 1][1]
 			pts[#pts + 1] = bottom[i + 1][2]
 		end
-		love.graphics.setColor(0.86, 0.90, 0.88, clamp(fade * flick * q * 0.16, 0, 0.55))
+		-- Warm cream reads as surface breakline, not white paint.
+		love.graphics.setColor(0.93, 0.92, 0.80, clamp(fade * flick * q * mult * 0.16, 0, 0.50))
 		love.graphics.polygon("fill", pts)
 	end
 end
@@ -155,8 +160,9 @@ function foam:update(dt, river)
 	end
 	local srcs = sources(river)
 	self.emit = self.emit + dt
-	if #parts < CAP then
-		local budget = self.emit * EMIT_RATE
+	local mult = river.foam_mult or 1
+	if #parts < CAP and mult > 0 then
+		local budget = self.emit * EMIT_RATE * mult
 		while budget >= 1 and #parts < CAP do
 			budget = budget - 1
 			spawn(parts, srcs)
@@ -190,8 +196,8 @@ function foam:draw(river)
 		local p = self.parts[i]
 		local u = p.age / p.life
 		local r = p.r * (0.7 + 0.8 * u - 0.4 * u * u)
-		local a = (1 - u) * 0.26 * math.min(1, u * 6)
-		love.graphics.setColor(0.93, 0.95, 0.93, a)
+		local a = (1 - u) * 0.24 * math.min(1, u * 6)
+		love.graphics.setColor(0.95, 0.94, 0.84, a)
 		love.graphics.ellipse("fill", p.x, p.y, r, r * 0.62)
 	end
 end
