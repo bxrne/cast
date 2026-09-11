@@ -25,9 +25,10 @@ local function ctrl(id, kind, get, set, extra)
 	return extra
 end
 
--- Load world, river, entities, and the debug panel.
+-- Load world, river, entities, and the debug panel. Opening
+-- beat is a fresh random seed. Tags start off.
 function love.load()
-	world = { seed = 1, paused = false, time_scale = 1, show_fish = true }
+	world = { seed = love.math.random(1, 24), paused = false, time_scale = 1, show_fish = false }
 	world.river = draw.river.new({ seed = world.seed })
 	spawn_entities()
 	dbg = debug_ui.new({
