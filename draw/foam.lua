@@ -3,13 +3,13 @@ local mathx = require "lib.math"
 local foam = {}
 foam.__index = foam
 local clamp = mathx.clamp
+local tile_noise = mathx.tile_noise
 
 local CAP = 150
 local EMIT_RATE = 12 -- flecks per second per unit of foam source
 local DRIFT = 0.045 -- slowest drift on calm water, t units per second
 local DRIFT_SPAN = 0.15 -- extra drift on brisk flows
-local STEPS = 24 -- trace subdivisions along the wake
-local SEGS = 8 -- trace segments, each with its own fade
+local PUFFS = 16 -- noise puffs per wake
 
 -- Qualify an emergent rock as a foam source: current strength trips the
 -- wake, the rock face is big enough to tear the surface film, and the
@@ -47,45 +47,28 @@ local function sources(river)
 	return out
 end
 
--- Streamwise foam trace behind a source rock. Each point follows the
--- live flow heading (eddies included), so the band is a real streamline
--- of the wake: it curves with the water, widens as the wake spreads,
--- and dissolves downstream. Warm cream, drawn under the rocks.
-local function draw_trace(river, o, q)
+-- Noise-driven foam puffs behind a source rock. Each puff follows the
+-- live flow heading off the wake centre, jittered by value noise, so
+-- the wake reads as patchy surface foam rather than a drawn band.
+local function draw_puffs(river, o, q, mult)
 	local span = o.wt * 3.4
 	local hw = river.char.water_half
-	local mult = river.foam_mult or 1
-	local top, bottom = {}, {}
-	for i = 0, STEPS do
-		local u = i / STEPS
+	local seed = o.t * 7.31 + o.across * 13.71
+	for i = 0, PUFFS do
+		local u = i / PUFFS
 		local s = river:sample_live(o.t + u * span, o.across)
-		-- Organic edge: the wake breathes on its own noise, so the
-		-- trace never reads as a smooth tube.
-		local breathe = 0.80 + 0.35 * math.sin(o.t * 173.0 + u * 37.0 + river.time * 1.9)
-		local width = o.dw * (0.42 + 1.05 * u * (1.0 - 0.42 * u)) * breathe
+		-- Two drifting noise lanes: across-spread and along-jitter.
+		local n1 = tile_noise(u * 3.1 + seed, river.time * 0.45, 16, seed)
+		local n2 = tile_noise(u * 3.1 + seed + 9.0, river.time * 0.6, 16, seed + 3.0)
+		local half = o.dw * (0.5 + 1.1 * (1 - u)) * (0.5 + 0.9 * n1)
 		local px, py = -s.ty, s.tx
-		local wx, wy = px * width * hw * 2, py * width * hw * 2
-		top[i + 1] = { s.x + wx, s.y + wy }
-		bottom[i + 1] = { s.x - wx, s.y - wy }
-	end
-	local per = STEPS / SEGS
-	local flick = 0.78 + 0.22 * math.sin(river.time * 2.1 + o.t * 91.0)
-	for k = 1, SEGS do
-		local a0, a1 = (k - 1) * per, k * per
-		local fade = (1 - k / SEGS) ^ 1.5
-		local pts = {}
-		for i = a0, a1 do
-			pts[#pts + 1] = top[i + 1][1]
-			pts[#pts + 1] = top[i + 1][2]
-		end
-		for i = a1, a0, -1 do
-			pts[#pts + 1] = bottom[i + 1][1]
-			pts[#pts + 1] = bottom[i + 1][2]
-		end
-		-- Warm cream reads as surface breakline, not white paint. The
-		-- 0.2 default foam knob keeps it faint without hiding it.
-		love.graphics.setColor(0.93, 0.92, 0.80, clamp(fade * flick * q * mult * 0.5, 0, 0.5))
-		love.graphics.polygon("fill", pts)
+		local wx = px * half * hw * 2 + s.tx * n2 * o.r * 0.7
+		local wy = py * half * hw * 2 + s.ty * n2 * o.r * 0.7
+		local r = o.r * (0.13 + 0.26 * n2) * (1.1 - 0.5 * u)
+		local fade = (1 - u) ^ 1.6
+		local a = clamp(fade * (0.3 + 0.7 * n1) * q * mult * 0.55, 0, 0.44)
+		love.graphics.setColor(0.93, 0.92, 0.80, a)
+		love.graphics.ellipse("fill", s.x + wx, s.y + wy, r, r * 0.72)
 	end
 end
 
@@ -190,12 +173,13 @@ function foam:density(x, y)
 	return math.min(1, n * 0.34)
 end
 
--- Muted traces behind the sources, then a few drifting flecks brighten
+-- Noise puffs behind the sources, then a few drifting flecks brighten
 -- the wake edges. Everything sits under the rocks.
 function foam:draw(river)
+	local mult = river.foam_mult or 1
 	local srcs = sources(river)
 	for i = 1, #srcs do
-		draw_trace(river, srcs[i].o, math.min(1, srcs[i].q))
+		draw_puffs(river, srcs[i].o, math.min(1, srcs[i].q), mult)
 	end
 	for i = 1, #self.parts do
 		local p = self.parts[i]
