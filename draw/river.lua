@@ -3,7 +3,7 @@ local palette = require "draw.palette"
 local obstacle = require "draw.obstacle"
 local splash_mod = require "draw.splash"
 local mathx = require "lib.math"
-local gfx = require "lib.gfx"
+local gfx = require "draw.gfx"
 
 local river = {}
 river.__index = river
@@ -266,9 +266,10 @@ function river.new(opts)
 	return self
 end
 
--- Rebuild meshes from the current seed and size.
+-- Rebuild meshes from the current seed and size. Bumps the
+-- cache id so habitat grids rebuild with the geometry.
 function river:rebuild()
-	gfx.release_all(self.bank_l, self.bank_r, self.wet_l, self.wet_r, self.water, self.ground, self.bank_tex)
+	self.cache_id = (self.cache_id or 0) + 1	gfx.release_all(self.bank_l, self.bank_r, self.wet_l, self.wet_r, self.water, self.ground, self.bank_tex)
 	local char = character(self.seed, self.width, self.height)
 	local pts = centerline(char, self.width, self.height)
 	self.obstacles = obstacle.generate(self.seed, char)
@@ -389,11 +390,6 @@ function river:push_out(t, across)
 		end
 	end
 	return clamp(t, 0.02, 0.98), clamp(across, 0.02, 0.98)
-end
-
--- Lie quality at a flow sample.
-function river:lie_score(sample)
-	return flow.lie_score(sample)
 end
 
 -- Draw velocity arrows for the debug overlay. Lives on top of the

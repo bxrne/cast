@@ -83,8 +83,14 @@ function habitat.score(sample, spec, river)
 	return hsi * (0.4 + 0.6 * clamp(0.5 + nei, 0, 1.4))
 end
 
--- Sample the channel on a regular (t, across) grid.
+-- Sample the channel on a regular (t, across) grid. Cached per
+-- river build, keyed weak so dead rivers drop their grids.
+local grid_cache = setmetatable({}, { __mode = "k" })
 function habitat.grid(river)
+	local hit = grid_cache[river]
+	if hit and hit.id == river.cache_id then
+		return hit.cells
+	end
 	local cells = {}
 	for i = 1, GRID_T do
 		local t = 0.07 + (i - 0.5) / GRID_T * 0.86
@@ -95,6 +101,7 @@ function habitat.grid(river)
 			cells[#cells + 1] = s
 		end
 	end
+	grid_cache[river] = { id = river.cache_id, cells = cells }
 	return cells
 end
 

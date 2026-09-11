@@ -33,7 +33,7 @@ end
 
 -- Choose a habitat lie from the cached river grid.
 local function pick_lie(self, river, extra)
-	local cells = river.cells or habitat.grid(river)
+	local cells = habitat.grid(river)
 	local taken = { { t = self.t, across = self.across } }
 	local pick = habitat.best(cells, self.species, river, extra and {} or taken, extra)
 	self.target_t = pick.t
