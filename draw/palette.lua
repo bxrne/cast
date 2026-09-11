@@ -7,10 +7,10 @@ local PEAT_SOIL, GRASS = { 0.18, 0.16, 0.10 }, { 0.24, 0.30, 0.14 }
 local BEDS = {
 	{
 		id = "chalk",
-		water = { 0.28, 0.50, 0.58 },
-		water_deep = { 0.10, 0.32, 0.46 },
-		bed = { 0.74, 0.72, 0.60 },
-		spot = { 0.52, 0.50, 0.38 },
+		water = { 0.22, 0.42, 0.50 },
+		water_deep = { 0.08, 0.26, 0.38 },
+		bed = { 0.50, 0.48, 0.38 },
+		spot = { 0.38, 0.36, 0.26 },
 		depth_scale = 0.82,
 		pool_contrast = 0.32,
 		obs = { rocks = 8, rock_r = 16 },
