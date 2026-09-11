@@ -57,7 +57,9 @@ end
 
 -- Load a shader from a game-relative path.
 function gfx.shader(path)
-	return love.graphics.newShader(assert(love.filesystem.read(path), path))
+	local code = love.filesystem.read(path)
+	assert(code, path)
+	return love.graphics.newShader(code)
 end
 
 -- Draw a polyline if it has at least two points.
