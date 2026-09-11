@@ -58,7 +58,7 @@ function love.update(dt)
 	end
 	dt = dt * world.time_scale
 	world.river:update(dt)
-	fish.update(world.fish, dt, world.river)
+	fish.update(world.fish, dt, world.river, world.player)
 	world.player:update(dt, world.river)
 end
 
