@@ -248,7 +248,7 @@ function river.new(opts)
 		shader = gfx.shader("draw/water.glsl"),
 		foam = foam.new(),
 		flow_tex = love.graphics.newCanvas(64, 36),
-		bed_exposure = 1,
+		bed_exposure = 1.4,
 		water_sheen = 0.5,
 		foam_mult = 0.2,
 	}, river)
@@ -309,6 +309,61 @@ end
 -- Animated sample for entities: heading and speed pick up the eddies.
 function river:sample_live(t, across)
 	return flow.sample(self.flow, t, across, self.time)
+end
+
+-- Rock occupancy at (t, across): 1 in the solid core, falling off at
+-- the rim so lie scoring eases the fish off the stone.
+function river:rock_at(t, across)
+	local list = self.obstacles
+	if not list then
+		return 0
+	end
+	local r_t = self.len_inv
+	local r_a = 1 / math.max(2 * self.char.water_half, 0.01)
+	local occ = 0
+	for i = 1, #list do
+		local o = list[i]
+		local ix = (t - o.t) / math.max(o.r * r_t, 0.001)
+		local iy = (across - o.across) / math.max(o.r * r_a, 0.001)
+		occ = math.max(occ, clamp(1.15 - (ix * ix + iy * iy), 0, 1))
+	end
+	return clamp(occ, 0, 1)
+end
+
+-- Push a point out of any rock it overlaps, in (t, across) space. A few
+-- passes settle a fish squeezed between two stones.
+function river:push_out(t, across)
+	local list = self.obstacles
+	if not list then
+		return t, across
+	end
+	local r_t = self.len_inv
+	local r_a = 1 / math.max(2 * self.char.water_half, 0.01)
+	for pass = 1, 6 do
+		local moved = false
+		for i = 1, #list do
+			local o = list[i]
+			local dx, dy = t - o.t, across - o.across
+			local ix, iy = dx / math.max(o.r * r_t, 0.001), dy / math.max(o.r * r_a, 0.001)
+			if ix * ix + iy * iy < 1 then
+				local dist = math.sqrt(ix * ix + iy * iy)
+				local nx, ny = 1, 0
+				if dist > 1e-5 then
+					nx, ny = ix / dist, iy / dist
+				else
+					local a = (o.t * 7.31 + o.across * 13.71) % 6.283
+					nx, ny = math.cos(a), math.sin(a)
+				end
+				t = o.t + nx * 1.05 * o.r * r_t
+				across = o.across + ny * 1.05 * o.r * r_a
+				moved = true
+			end
+		end
+		if not moved then
+			break
+		end
+	end
+	return clamp(t, 0.02, 0.98), clamp(across, 0.02, 0.98)
 end
 
 -- Lie quality at a flow sample.

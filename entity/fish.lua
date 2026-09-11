@@ -221,6 +221,9 @@ function fish.update(list, dt, river, player)
 		bt.tick(self.tree, { fish = self, river = river, dt = dt, player = player, list = list })
 		mind.approach_column(self, mind.column_target(self, self.phase), dt)
 		sync_pose(self, river)
+		-- Rocks are solid: never hold or swim through one.
+		self.t, self.across = river:push_out(self.t, self.across)
+		sync_pose(self, river)
 		if self.at_lie then
 			self.home_t, self.home_across = self.t, self.across
 		end
@@ -252,8 +255,9 @@ function fish.draw(list, river)
 			love.graphics.setColor(0.78, 0.84, 0.80, 0.22 * arch)
 			love.graphics.ellipse("line", self.x, self.y, self.surface.ring * (0.4 + 0.6 * u), self.surface.ring * 0.35 * (0.4 + 0.6 * u))
 		end
-		-- Deep fish sink into the water colour; surface fish keep colour.
-		local sink = (1 - col) * 0.8
+		-- Deep fish sink toward the water colour; surface fish keep the
+		-- dorsal tones, so each species still reads from above.
+		local sink = (1 - col) * 0.62
 		local body = mix3(self.species.color, deep, sink)
 		local stripe = mix3(self.species.stripe, deep, sink)
 		love.graphics.push()

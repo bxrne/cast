@@ -72,7 +72,8 @@ end
 -- Combined habitat score: geometric-mean HSI times normalised energy.
 function habitat.score(sample, spec, river)
 	local base = river.flow.base_speed
-	local hsi = (si_velocity(sample, spec, base) * si_depth(sample, spec) * si_cover(sample, spec)) ^ (1 / 3)
+	local area = (1 - (sample.occ or 0) * 1.15)
+	local hsi = (si_velocity(sample, spec, base) * si_depth(sample, spec) * si_cover(sample, spec)) ^ (1 / 3) * clamp(area, 0, 1)
 	local nei = habitat.energy(sample, river, spec)
 	return hsi * (0.4 + 0.6 * clamp(0.5 + nei, 0, 1.4))
 end
@@ -84,7 +85,9 @@ function habitat.grid(river)
 		local t = 0.07 + (i - 0.5) / GRID_T * 0.86
 		for j = 1, GRID_A do
 			local across = ACROSS_LO + (j - 1) / (GRID_A - 1) * (ACROSS_HI - ACROSS_LO)
-			cells[#cells + 1] = river:sample(t, across)
+			local s = river:sample(t, across)
+			s.occ = river:rock_at(t, across)
+			cells[#cells + 1] = s
 		end
 	end
 	return cells
