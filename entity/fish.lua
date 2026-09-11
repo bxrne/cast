@@ -293,27 +293,30 @@ function fish.update(list, dt, river, player)
 	end
 end
 
--- One body segment. Lateral offset bends the spine.
-local function segment(self, s, len, phase, slither, tail_amp)
+-- One body segment. Lateral offset bends the spine. Head stays
+-- planted when effort is low. Only the tail works.
+local function segment(self, s, len, phase, slither, tail_amp, steady)
 	local along = (s - 0.5) * len
 	local wave = math.sin(phase - s * 5.2)
 	local env = slither * (0.4 + 0.6 * s) + tail_amp * s * s
-	local lat = wave * env * len * 0.10
+	local damp = steady * (0.2 + 0.8 * s) + (1 - steady)
+	local lat = wave * env * damp * len * 0.10
 	local w = len * (0.16 * (1 - math.abs(s - 0.42) * 1.5) + 0.03)
 	if w < 1 then w = 1 end
 	return along, lat, w
 end
 
 -- Swim effort by activity. Freq scales beat, amp scales tail.
--- Slow holds show body slither. Bursts go tail driven.
+-- Holds barely move. Head stays still, tail ticks over.
+-- Bursts go full tail driven.
 local ACT = {
-	rest = { freq = 0.45, amp = 0.25, slide = 1.0 },
-	drift = { freq = 0.7, amp = 0.45, slide = 1.0 },
-	hold = { freq = 0.7, amp = 0.4, slide = 1.0 },
-	cruise = { freq = 1.25, amp = 0.95, slide = 0.6 },
-	chase = { freq = 1.7, amp = 1.25, slide = 0.35 },
-	burst = { freq = 2.0, amp = 1.4, slide = 0.3 },
-	rise = { freq = 1.8, amp = 1.3, slide = 0.4 },
+	rest = { freq = 0.25, amp = 0.10, slide = 0.4, steady = 1.0 },
+	drift = { freq = 0.4, amp = 0.16, slide = 0.5, steady = 1.0 },
+	hold = { freq = 0.45, amp = 0.18, slide = 0.5, steady = 1.0 },
+	cruise = { freq = 1.25, amp = 0.95, slide = 0.6, steady = 0.0 },
+	chase = { freq = 1.7, amp = 1.25, slide = 0.35, steady = 0.0 },
+	burst = { freq = 2.0, amp = 1.4, slide = 0.3, steady = 0.0 },
+	rise = { freq = 1.8, amp = 1.3, slide = 0.4, steady = 0.0 },
 }
 
 -- Draw deep fish first. Visibility follows water clarity, column
@@ -346,19 +349,25 @@ function fish.draw(list, river)
 		local body = mix3(self.species.color, deep, sink)
 		local stripe = mix3(self.species.stripe, deep, sink)
 		local ca, sa = math.cos(ang), math.sin(ang)
+		-- Hold surge. The whole fish breathes a touch along its
+		-- heading instead of shivering in place.
+		local surge = 0
+		if act.steady > 0 then
+			surge = math.sin(phase * 0.5) * len * 0.03 * act.steady
+		end
 		love.graphics.setColor(body[1], body[2], body[3], vis)
 		for s = 1, 5 do
 			local u = s / 6
-			local along, lat, w = segment(self, u, len, phase, slither, tail_amp)
-			local wx = self.x + ca * along - sa * lat
-			local wy = self.y + lift + sa * along + ca * lat
+			local along, lat, w = segment(self, u, len, phase, slither, tail_amp, act.steady)
+			local wx = self.x + ca * (along + surge) - sa * lat
+			local wy = self.y + lift + sa * (along + surge) + ca * lat
 			love.graphics.ellipse("fill", wx, wy, len * 0.11, w * 0.5, ang, 8)
 		end
 		love.graphics.setColor(stripe[1], stripe[2], stripe[3], vis)
 		local tu = 0.82
-		local along, lat = segment(self, tu, len, phase, slither, tail_amp * 1.2)
-		local tx = self.x + ca * along - sa * lat
-		local ty = self.y + lift + sa * along + ca * lat
+		local along, lat = segment(self, tu, len, phase, slither, tail_amp * 1.2, act.steady)
+		local tx = self.x + ca * (along + surge) - sa * lat
+		local ty = self.y + lift + sa * (along + surge) + ca * lat
 		local flick = math.sin(phase - tu * 5.2) * tail_amp * len * 0.06
 		love.graphics.push()
 		love.graphics.translate(tx, ty)
