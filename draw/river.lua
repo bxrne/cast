@@ -250,7 +250,7 @@ function river.new(opts)
 		flow_tex = love.graphics.newCanvas(64, 36),
 		bed_exposure = 1,
 		water_sheen = 0.5,
-		foam_mult = 1,
+		foam_mult = 0.2,
 	}, river)
 	self:rebuild()
 	return self

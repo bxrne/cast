@@ -12,8 +12,12 @@ local STEPS = 24 -- trace subdivisions along the wake
 local SEGS = 8 -- trace segments, each with its own fade
 
 -- Qualify an emergent rock as a foam source: current strength trips the
--- wake, and the rock face is big enough to tear the surface film.
+-- wake, the rock face is big enough to tear the surface film, and the
+-- rock holds mid-channel so foam never spills onto the bank.
 local function qualify(river, o)
+	if o.across < 0.16 or o.across > 0.84 then
+		return nil
+	end
 	local s = river:sample(o.t, o.across)
 	if s.depth >= o.r * 0.85 then
 		return nil
@@ -78,8 +82,9 @@ local function draw_trace(river, o, q)
 			pts[#pts + 1] = bottom[i + 1][1]
 			pts[#pts + 1] = bottom[i + 1][2]
 		end
-		-- Warm cream reads as surface breakline, not white paint.
-		love.graphics.setColor(0.93, 0.92, 0.80, clamp(fade * flick * q * mult * 0.16, 0, 0.50))
+		-- Warm cream reads as surface breakline, not white paint. The
+		-- 0.2 default foam knob keeps it faint without hiding it.
+		love.graphics.setColor(0.93, 0.92, 0.80, clamp(fade * flick * q * mult * 0.5, 0, 0.5))
 		love.graphics.polygon("fill", pts)
 	end
 end
@@ -153,7 +158,7 @@ function foam:update(dt, river)
 		p.across = p.across + math.sin(river.time * (1.1 + p.seed) + p.seed * 9.0) * dt * 0.012
 		p.x, p.y = s.x, s.y
 		p.age = p.age + dt
-		if p.age >= p.life or over_rock(river, p) then
+		if p.age >= p.life or over_rock(river, p) or p.across < 0.07 or p.across > 0.93 then
 			parts[i] = parts[#parts]
 			parts[#parts] = nil
 		end
