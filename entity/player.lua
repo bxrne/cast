@@ -1,40 +1,25 @@
+local mathx = require "lib.math"
+
 local player = {}
 player.__index = player
 
-local BANK_OFFSET = 36
-local WALK = 0.12
+local BANK_OFFSET, WALK = 36, 0.12
 
+-- World position on a bank at station t.
 local function sample_bank(river, t, side)
-	local across
-	if side < 0 then
-		across = 0
-	else
-		across = 1
-	end
-	local s = river:sample(t, across)
-	local sign = 1
-	if side < 0 then
-		sign = -1
-	end
-	return s.x + s.px * sign * BANK_OFFSET, s.y + s.py * sign * BANK_OFFSET, s
+	local s = river:sample(t, side < 0 and 0 or 1)
+	local sign = side < 0 and -1 or 1
+	return s.x + s.px * sign * BANK_OFFSET, s.y + s.py * sign * BANK_OFFSET
 end
 
+-- Place the player on a bank from the world seed.
 function player.spawn(river, seed)
-	local t = 0.38
-	local side = -1
-	if seed % 2 == 0 then
-		side = 1
-	end
+	local t, side = 0.38, seed % 2 == 0 and 1 or -1
 	local x, y = sample_bank(river, t, side)
-	return setmetatable({
-		kind = "player",
-		t = t,
-		side = side,
-		x = x,
-		y = y,
-	}, player)
+	return setmetatable({ kind = "player", t = t, side = side, x = x, y = y }, player)
 end
 
+-- Walk along the river with WASD. A/D pick a bank.
 function player:update(dt, river)
 	local dt_t = 0
 	if love.keyboard.isDown("w") then
@@ -49,10 +34,11 @@ function player:update(dt, river)
 	if love.keyboard.isDown("d") then
 		self.side = 1
 	end
-	self.t = math.max(0.04, math.min(0.96, self.t + dt_t))
+	self.t = mathx.clamp(self.t + dt_t, 0.04, 0.96)
 	self.x, self.y = sample_bank(river, self.t, self.side)
 end
 
+-- Top-down waders and torso.
 function player:draw()
 	love.graphics.push()
 	love.graphics.translate(self.x, self.y)

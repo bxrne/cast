@@ -1,180 +1,58 @@
 local flow = require "draw.flow"
+local palette = require "draw.palette"
+local mathx = require "lib.math"
+local gfx = require "lib.gfx"
 
 local river = {}
 river.__index = river
 
-local SAMPLES = 96
-local STREAKS = 3
-local TILE = 256
-local BANK_TILE = 128
-local ALONG = 8
-local WET_LIP = 8
-local CLUTTER_SMALL = 140
-local CLUTTER_MED = 28
-local CLUTTER_STONE = 55
-local TAU = math.pi * 2
+local SAMPLES, STREAKS, TILE, BANK_TILE = 96, 3, 256, 128
+local ALONG, WET_LIP = 8, 8
+local lerp, clamp, mix3, hash2 = mathx.lerp, mathx.clamp, mathx.mix3, mathx.hash2
+local tile_noise, tangent, TAU = mathx.tile_noise, mathx.tangent, mathx.TAU
+local vert, strip = gfx.vert, gfx.strip
 
-local STONE = { 0.36, 0.34, 0.28 }
-local MOSS = { 0.27, 0.36, 0.16 }
-local PEAT_SOIL = { 0.18, 0.16, 0.10 }
-local GRASS = { 0.24, 0.30, 0.14 }
-local WET_CLEAR = { 0.16, 0.15, 0.12 }
-local WET_PEAT = { 0.12, 0.14, 0.10 }
-local GRAVEL_CLEAR = { 0.32, 0.30, 0.24 }
-local GRAVEL_PEAT = { 0.22, 0.20, 0.16 }
-local WATER_DEEP_CLEAR = { 0.10, 0.20, 0.18 }
-local WATER_DEEP_PEAT = { 0.06, 0.10, 0.08 }
-local WATER_MID_CLEAR = { 0.18, 0.32, 0.26 }
-local WATER_MID_PEAT = { 0.12, 0.18, 0.14 }
-local FOAM_CLEAR = { 0.58, 0.62, 0.56 }
-local FOAM_PEAT = { 0.48, 0.46, 0.38 }
-
-local WATER = [[
-extern number time;
-extern number speed;
-extern vec3 foam;
-
-float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-float noise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	f = f * f * (3.0 - 2.0 * f);
-	return mix(
-		mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-		mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x),
-		f.y
-	);
-}
-
-vec4 effect(vec4 color, Image tex, vec2 uv, vec2 screen) {
-	float along = uv.x;
-	float across = uv.y;
-	vec2 dir = vec2(along * 11.0 - time * speed, across * 2.4);
-	float n1 = noise(dir);
-	float n2 = noise(dir * vec2(1.8, 1.15) + vec2(2.1, 0.4));
-	float n3 = noise(dir * vec2(0.45, 0.8) + vec2(time * 0.05, 3.0));
-	vec3 c = color.rgb * (0.93 + 0.07 * n3);
-	float spec = pow(clamp(n1 * 0.55 + n2 * 0.45, 0.0, 1.0), 22.0) * 0.07;
-	c += spec * vec3(0.78, 0.84, 0.80);
-	float rim = min(across, 1.0 - across);
-	float foam_n = noise(vec2(along * 18.0 - time * speed * 0.4, across * 6.0));
-	float edge = smoothstep(0.0, 0.07 + 0.06 * foam_n, rim);
-	c = mix(mix(foam, c, 0.55 + 0.45 * foam_n), c, edge);
-	return vec4(c, 1.0);
-}
-]]
-
-local function lerp(a, b, t)
-	return a + (b - a) * t
-end
-
-local function mix3(a, b, t)
-	return { lerp(a[1], b[1], t), lerp(a[2], b[2], t), lerp(a[3], b[3], t) }
-end
-
-local function clamp(x, lo, hi)
-	if x < lo then
-		return lo
-	end
-	if x > hi then
-		return hi
-	end
-	return x
-end
-
-local function norm(x, y)
-	local len = math.sqrt(x * x + y * y)
-	if len < 1e-6 then
-		return 1, 0
-	end
-	return x / len, y / len
-end
-
-local function release(obj)
-	if obj then
-		obj:release()
-	end
-end
-
-local function fract(x)
-	return x - math.floor(x)
-end
-
-local function hash(ix, iy, s)
-	return fract(math.sin(ix * 127.1 + iy * 311.7 + s * 19.19) * 43758.5453)
-end
-
-local function tile_noise(x, y, period, s)
-	local ix = math.floor(x)
-	local iy = math.floor(y)
-	local fx = x - ix
-	local fy = y - iy
-	fx = fx * fx * (3 - 2 * fx)
-	fy = fy * fy * (3 - 2 * fy)
-	local x0, y0 = ix % period, iy % period
-	local x1, y1 = (ix + 1) % period, (iy + 1) % period
-	return lerp(
-		lerp(hash(x0, y0, s), hash(x1, y0, s), fx),
-		lerp(hash(x0, y1, s), hash(x1, y1, s), fx),
-		fy
-	)
-end
-
-local function make_image(size, fn)
-	local data = love.image.newImageData(size, size)
-	for y = 0, size - 1 do
-		for x = 0, size - 1 do
-			local n = fn(x, y)
-			data:setPixel(x, y, n, n, n, 1)
-		end
-	end
-	local img = love.graphics.newImage(data)
-	img:setWrap("repeat", "repeat")
-	img:setFilter("linear", "linear")
-	return img
-end
-
+-- Repeating dirt/grass grain for the floodplain.
 local function grain_tile(seed)
-	return make_image(TILE, function(x, y)
+	return gfx.image(TILE, function(x, y)
 		local n = 0.14 * tile_noise(x / 32, y / 32, 8, seed)
 			+ 0.34 * tile_noise(x / 8, y / 8, 32, seed + 3)
 			+ 0.30 * tile_noise(x / 4, y / 4, 64, seed + 7)
 			+ 0.22 * tile_noise(x / 2, y / 2, 128, seed + 13)
-		n = n + (hash(x, y, seed + 11) - 0.5) * 0.14
-		if hash(x, y, seed + 23) > 0.982 then
+		n = n + (hash2(x, y, seed + 11) - 0.5) * 0.14
+		if hash2(x, y, seed + 23) > 0.982 then
 			n = n * 0.70
 		end
 		return clamp(0.70 + 0.30 * n, 0.58, 1)
 	end)
 end
 
+-- Streaky pebble grain for bank strips.
 local function bank_tile(seed)
-	return make_image(BANK_TILE, function(x, y)
-		local along = tile_noise(x / 8, y / 16, 16, seed)
-		local across = tile_noise(x / 16, y / 8, 8, seed + 5)
-		local n = 0.50 * along + 0.30 * across
-		n = n + (hash(x, y, seed + 11) - 0.5) * 0.16
-		if hash(x, y, seed + 29) > 0.96 then
+	return gfx.image(BANK_TILE, function(x, y)
+		local n = 0.50 * tile_noise(x / 8, y / 16, 16, seed) + 0.30 * tile_noise(x / 16, y / 8, 8, seed + 5)
+		n = n + (hash2(x, y, seed + 11) - 0.5) * 0.16
+		if hash2(x, y, seed + 29) > 0.96 then
 			n = n * 0.55
-		elseif hash(x, y, seed + 31) > 0.93 then
+		elseif hash2(x, y, seed + 31) > 0.93 then
 			n = n * 0.78
 		end
 		return clamp(0.55 + 0.45 * n, 0.40, 1)
 	end)
 end
 
-local function ellipse(x, y, rx, ry, rot, rgb, alpha)
-	love.graphics.setColor(rgb[1], rgb[2], rgb[3], alpha)
-	love.graphics.push()
-	love.graphics.translate(x, y)
-	love.graphics.rotate(rot)
-	love.graphics.ellipse("fill", 0, 0, rx, ry)
-	love.graphics.pop()
+-- Scatter n ellipses with a color factory.
+local function scatter(rng, n, w, h, rx, ry, color, alpha)
+	for _ = 1, n do
+		gfx.ellipse(
+			rng:random() * w, rng:random() * h,
+			rx[1] + rng:random() * rx[2], ry[1] + rng:random() * ry[2],
+			rng:random() * TAU, color(rng), alpha[1] + rng:random() * alpha[2]
+		)
+	end
 end
 
+-- Bake floodplain grain plus clutter into a canvas.
 local function ground_canvas(seed, width, height, char)
 	local grain = grain_tile(seed)
 	local quad = love.graphics.newQuad(0, 0, width, height, TILE, TILE)
@@ -183,61 +61,22 @@ local function ground_canvas(seed, width, height, char)
 	canvas:renderTo(function()
 		love.graphics.setColor(char.ground)
 		love.graphics.draw(grain, quad, 0, 0)
-		for _ = 1, CLUTTER_MED do
-			local shade = mix3(char.ground, mix3(PEAT_SOIL, GRASS, rng:random()), 0.35 + rng:random() * 0.4)
-			ellipse(
-				rng:random() * width,
-				rng:random() * height,
-				18 + rng:random() * 34,
-				10 + rng:random() * 22,
-				rng:random() * TAU,
-				shade,
-				0.18 + rng:random() * 0.12
-			)
-		end
-		for _ = 1, CLUTTER_SMALL do
-			local shade = mix3(char.ground, mix3(MOSS, STONE, rng:random()), 0.25 + rng:random() * 0.5)
-			ellipse(
-				rng:random() * width,
-				rng:random() * height,
-				3 + rng:random() * 11,
-				2 + rng:random() * 7,
-				rng:random() * TAU,
-				shade,
-				0.22 + rng:random() * 0.20
-			)
-		end
-		for _ = 1, CLUTTER_STONE do
-			ellipse(
-				rng:random() * width,
-				rng:random() * height,
-				1.2 + rng:random() * 3.2,
-				0.9 + rng:random() * 2.2,
-				rng:random() * TAU,
-				STONE,
-				0.28 + rng:random() * 0.25
-			)
-		end
+		scatter(rng, 28, width, height, { 18, 34 }, { 10, 22 }, function(r)
+			return mix3(char.ground, mix3(palette.PEAT_SOIL, palette.GRASS, r:random()), 0.35 + r:random() * 0.4)
+		end, { 0.18, 0.12 })
+		scatter(rng, 140, width, height, { 3, 11 }, { 2, 7 }, function(r)
+			return mix3(char.ground, mix3(palette.MOSS, palette.STONE, r:random()), 0.25 + r:random() * 0.5)
+		end, { 0.22, 0.20 })
+		scatter(rng, 55, width, height, { 1.2, 3.2 }, { 0.9, 2.2 }, function()
+			return palette.STONE
+		end, { 0.28, 0.25 })
 		love.graphics.setColor(1, 1, 1, 1)
 	end)
 	grain:release()
 	return canvas
 end
 
-local function vert(x, y, u, v, rgb)
-	return { x = x, y = y, u = u, v = v, r = rgb[1], g = rgb[2], b = rgb[3] }
-end
-
-local function strip(left, right)
-	local verts = {}
-	for i = 1, #left do
-		local l, r = left[i], right[i]
-		verts[#verts + 1] = { l.x, l.y, l.u, l.v, l.r, l.g, l.b, 1 }
-		verts[#verts + 1] = { r.x, r.y, r.u, r.v, r.r, r.g, r.b, 1 }
-	end
-	return love.graphics.newMesh(verts, "strip", "static")
-end
-
+-- Pick a size band so creeks stay rare.
 local function river_size(rng)
 	local roll = rng:random()
 	if roll < 0.28 then
@@ -249,50 +88,25 @@ local function river_size(rng)
 	return 0.78 + rng:random() * 0.22
 end
 
-local function palette(peat, lush)
-	return {
-		ground = mix3(mix3(STONE, GRASS, lush), PEAT_SOIL, peat * 0.55),
-		bank = mix3(mix3(STONE, MOSS, lush), mix3(PEAT_SOIL, MOSS, 0.35), peat * 0.45),
-		wet = mix3(WET_CLEAR, WET_PEAT, peat),
-		gravel = mix3(GRAVEL_CLEAR, GRAVEL_PEAT, peat),
-		water_deep = mix3(WATER_DEEP_CLEAR, WATER_DEEP_PEAT, peat),
-		water_mid = mix3(WATER_MID_CLEAR, WATER_MID_PEAT, peat),
-		foam = mix3(FOAM_CLEAR, FOAM_PEAT, peat),
-	}
-end
-
+-- Seeded channel proportions and colours.
 local function character(seed, width, height)
 	local rng = love.math.newRandomGenerator(seed)
-	local size = river_size(rng)
-	local peat = rng:random()
-	local lush = rng:random()
-	local energy = rng:random()
+	local size, peat, lush, energy = river_size(rng), rng:random(), rng:random(), rng:random()
 	local span = math.min(width, height)
-	local colors = palette(peat, lush)
-	return {
-		water_half = lerp(78, span * 0.30, size),
-		bank_extra = lerp(34, 96, 0.45 * size + 0.55 * lush),
-		meander = lerp(span * 0.035, span * 0.12, energy) * (1.0 - 0.45 * size),
-		flow_speed = lerp(0.45, 1.55, energy),
-		p1 = rng:random() * TAU,
-		p2 = rng:random() * TAU,
-		p3 = rng:random() * TAU,
-		ground = colors.ground,
-		bank = colors.bank,
-		wet = colors.wet,
-		gravel = colors.gravel,
-		water_deep = colors.water_deep,
-		water_mid = colors.water_mid,
-		foam = colors.foam,
-	}
+	local char = palette.make(peat, lush)
+	char.water_half = lerp(78, span * 0.30, size)
+	char.bank_extra = lerp(34, 96, 0.45 * size + 0.55 * lush)
+	char.meander = lerp(span * 0.035, span * 0.12, energy) * (1.0 - 0.45 * size)
+	char.flow_speed = lerp(0.45, 1.55, energy)
+	char.p1, char.p2, char.p3 = rng:random() * TAU, rng:random() * TAU, rng:random() * TAU
+	return char
 end
 
+-- Bottom-left to top-right centerline with meander.
 local function centerline(char, width, height)
-	local x0, y0 = -20, height + 8
-	local x1, y1 = width + 20, -8
-	local dx, dy = norm(x1 - x0, y1 - y0)
-	local px, py = -dy, dx
-	local pts = {}
+	local x0, y0, x1, y1 = -20, height + 8, width + 20, -8
+	local dx, dy = mathx.norm(x1 - x0, y1 - y0)
+	local px, py, pts = -dy, dx, {}
 	for i = 0, SAMPLES do
 		local t = i / SAMPLES
 		local wobble = math.sin(t * 2.15 * math.pi + char.p1) * char.meander
@@ -308,44 +122,28 @@ local function centerline(char, width, height)
 	return pts
 end
 
-local function tangent(pts, i)
-	local prev = pts[math.max(1, i - 1)]
-	local nxt = pts[math.min(#pts, i + 1)]
-	return norm(nxt.x - prev.x, nxt.y - prev.y)
-end
-
+-- Irregular bank width along the river.
 local function ragged(t, base, pa, pb)
-	local n = 0.70
-		+ 0.22 * math.sin(t * 13.0 * math.pi + pa)
-		+ 0.14 * math.sin(t * 29.0 * math.pi + pb)
-		+ 0.08 * math.sin(t * 47.0 * math.pi + pa * 0.7)
+	local n = 0.70 + 0.22 * math.sin(t * 13 * math.pi + pa) + 0.14 * math.sin(t * 29 * math.pi + pb) + 0.08 * math.sin(t * 47 * math.pi + pa * 0.7)
 	return math.max(18, base * n)
 end
 
+-- Water vertex with depth colour and local speed.
 local function water_vert(p, px, py, across, char, field)
 	local thalweg = 0.5 + 0.08 * math.sin(p.t * 4.1 + char.p1)
 	local depth = 1 - math.min(1, (across - thalweg) ^ 2 * 5.2)
-	local color = mix3(char.water_mid, char.water_deep, depth)
-	local dist = p.hw * (across * 2 - 1)
 	local st = field.stations[p.i]
 	local spd = flow.speed(field, st.kappa, across, st.width_scale)
-	local chop = clamp((spd / field.base_speed - 0.85) / 0.8, 0, 1)
-	color = mix3(color, char.foam, chop * 0.10)
-	local v = vert(p.x + px * dist, p.y + py * dist, p.t * ALONG, across, color)
+	local color = mix3(mix3(char.water_mid, char.water_deep, depth), char.foam, clamp((spd / field.base_speed - 0.85) / 0.8, 0, 1) * 0.10)
+	local v = vert(p.x + px * p.hw * (across * 2 - 1), p.y + py * p.hw * (across * 2 - 1), p.t * ALONG, across, color)
 	v.speed = spd
 	return v
 end
 
-local function bank_vert(x, y, t, across, rgb)
-	return vert(x, y, t * 10, across, rgb)
-end
-
+-- Bank/water rails at every station.
 local function rails(pts, char, field)
-	local bank_lo, bank_li = {}, {}
-	local bank_ri, bank_ro = {}, {}
-	local wet_l, wet_r = {}, {}
-	local water_l, water_r = {}, {}
-
+	local bank_lo, bank_li, bank_ri, bank_ro = {}, {}, {}, {}
+	local wet_l, wet_r, water_l, water_r = {}, {}, {}, {}
 	for i = 1, #pts do
 		local p = pts[i]
 		p.i = i
@@ -354,63 +152,43 @@ local function rails(pts, char, field)
 		local wet = p.hw + WET_LIP * (0.85 + 0.25 * math.sin(p.t * 11 * math.pi + char.p2))
 		local left = p.hw + ragged(p.t, char.bank_extra, char.p1, char.p3)
 		local right = p.hw + ragged(p.t, char.bank_extra, char.p2, char.p1)
-		local along = p.t * ALONG
 		local shade = 0.82 + 0.18 * math.sin(p.t * 19 * math.pi + char.p3)
-		local inner = mix3(char.gravel, char.wet, 0.35 + 0.25 * shade)
-		local outer = mix3(char.bank, char.gravel, 0.15 * (1 - shade))
-
-		bank_li[i] = bank_vert(p.x - px * wet, p.y - py * wet, p.t, 0, inner)
-		bank_lo[i] = bank_vert(p.x - px * left, p.y - py * left, p.t, 1, outer)
-		bank_ri[i] = bank_vert(p.x + px * wet, p.y + py * wet, p.t, 0, inner)
-		bank_ro[i] = bank_vert(p.x + px * right, p.y + py * right, p.t, 1, outer)
+		local inner, outer = mix3(char.gravel, char.wet, 0.35 + 0.25 * shade), mix3(char.bank, char.gravel, 0.15 * (1 - shade))
+		local along = p.t * ALONG
+		bank_li[i] = vert(p.x - px * wet, p.y - py * wet, p.t * 10, 0, inner)
+		bank_lo[i] = vert(p.x - px * left, p.y - py * left, p.t * 10, 1, outer)
+		bank_ri[i] = vert(p.x + px * wet, p.y + py * wet, p.t * 10, 0, inner)
+		bank_ro[i] = vert(p.x + px * right, p.y + py * right, p.t * 10, 1, outer)
 		wet_l[i] = vert(p.x - px * wet, p.y - py * wet, along, 0, char.wet)
 		wet_r[i] = vert(p.x + px * wet, p.y + py * wet, along, 1, char.wet)
 		water_l[i] = water_vert(p, px, py, 0, char, field)
 		water_r[i] = water_vert(p, px, py, 1, char, field)
 	end
-
-	return {
-		bank_lo = bank_lo,
-		bank_li = bank_li,
-		bank_ri = bank_ri,
-		bank_ro = bank_ro,
-		wet_l = wet_l,
-		wet_r = wet_r,
-		water_l = water_l,
-		water_r = water_r,
-	}
+	return { bank_lo = bank_lo, bank_li = bank_li, bank_ri = bank_ri, bank_ro = bank_ro, wet_l = wet_l, wet_r = wet_r, water_l = water_l, water_r = water_r }
 end
 
-local function flush_line(pts)
-	if #pts >= 4 then
-		love.graphics.line(pts)
-	end
-end
-
+-- Short current streaks that stay inside the water strip.
 local function draw_streaks(channel, time, speed)
 	local left, right = channel.water_l, channel.water_r
-	local n = #left
 	love.graphics.setLineWidth(1)
 	for s = 1, STREAKS do
-		local across = s / (STREAKS + 1)
-		local phase = (time * speed * 0.10 + s * 0.23) % 1
+		local across, phase, pts = s / (STREAKS + 1), (time * speed * 0.10 + s * 0.23) % 1, {}
 		love.graphics.setColor(0.72, 0.78, 0.72, 0.06 + (s % 2) * 0.03)
-		local pts = {}
-		for i = 1, n do
-			local local_speed = left[i].speed or speed
-			local along = (left[i].u / ALONG + phase * (0.7 + 0.3 * (local_speed / math.max(speed, 0.1)))) % 1
+		for i = 1, #left do
+			local along = (left[i].u / ALONG + phase * (0.7 + 0.3 * ((left[i].speed or speed) / math.max(speed, 0.1)))) % 1
 			if along < 0.18 then
 				pts[#pts + 1] = lerp(left[i].x, right[i].x, across)
 				pts[#pts + 1] = lerp(left[i].y, right[i].y, across)
 			else
-				flush_line(pts)
+				gfx.line(pts)
 				pts = {}
 			end
 		end
-		flush_line(pts)
+		gfx.line(pts)
 	end
 end
 
+-- Create a river scene for this window.
 function river.new(opts)
 	opts = opts or {}
 	local self = setmetatable({
@@ -419,78 +197,71 @@ function river.new(opts)
 		height = opts.height or love.graphics.getHeight(),
 		time = 0,
 		show_flow = false,
-		shader = love.graphics.newShader(WATER),
+		shader = gfx.shader("draw/water.glsl"),
 	}, river)
 	self:rebuild()
 	return self
 end
 
+-- Rebuild meshes from the current seed and size.
 function river:rebuild()
-	release(self.bank_l)
-	release(self.bank_r)
-	release(self.wet)
-	release(self.water)
-	release(self.ground)
-	release(self.bank_tex)
-
+	gfx.release_all(self.bank_l, self.bank_r, self.wet, self.water, self.ground, self.bank_tex)
 	local char = character(self.seed, self.width, self.height)
 	local pts = centerline(char, self.width, self.height)
 	local field = flow.build(pts, char.flow_speed)
 	local channel = rails(pts, char, field)
-	local bank_tex = bank_tile(self.seed)
-
-	self.char = char
-	self.flow = field
-	self.channel = channel
+	self.char, self.flow, self.channel = char, field, channel
 	self.ground = ground_canvas(self.seed, self.width, self.height, char)
-	self.bank_tex = bank_tex
+	self.bank_tex = bank_tile(self.seed)
 	self.bank_l = strip(channel.bank_lo, channel.bank_li)
 	self.bank_r = strip(channel.bank_ri, channel.bank_ro)
 	self.wet = strip(channel.wet_l, channel.wet_r)
 	self.water = strip(channel.water_l, channel.water_r)
-	self.bank_l:setTexture(bank_tex)
-	self.bank_r:setTexture(bank_tex)
+	self.bank_l:setTexture(self.bank_tex)
+	self.bank_r:setTexture(self.bank_tex)
 end
 
+-- Replace the seed and rebuild.
 function river:reseed(seed)
 	self.seed = seed
 	self:rebuild()
 end
 
+-- Fit the river to a new window size.
 function river:resize(width, height)
-	self.width = width
-	self.height = height
+	self.width, self.height = width, height
 	self:rebuild()
 end
 
+-- Advance water animation.
 function river:update(dt)
 	self.time = self.time + dt
 end
 
+-- Sample flow at parametric (t, across).
 function river:sample(t, across)
 	return flow.sample(self.flow, t, across)
 end
 
+-- Lie quality at a flow sample.
 function river:lie_score(sample)
 	return flow.lie_score(sample)
 end
 
+-- Draw velocity arrows for the debug overlay.
 function river:draw_flow()
-	local field = self.flow
 	love.graphics.setLineWidth(1.5)
 	for i = 1, 20 do
-		local t = (i - 0.5) / 20
 		for j = 1, 5 do
-			local across = j / 6
-			local s = flow.sample(field, t, across)
-			local len = 10 + s.speed * 14
-			local k = (s.speed / field.base_speed)
+			local s = flow.sample(self.flow, (i - 0.5) / 20, j / 6)
+			local k = s.speed / self.flow.base_speed
 			love.graphics.setColor(0.2 + k * 0.6, 0.55, 0.85 - k * 0.4, 0.75)
-			love.graphics.line(s.x, s.y, s.x + s.tx * len, s.y + s.ty * len)
+			love.graphics.line(s.x, s.y, s.x + s.tx * (10 + s.speed * 14), s.y + s.ty * (10 + s.speed * 14))
 		end
 	end
 end
 
+-- Draw ground, banks, water, and optional flow overlay.
 function river:draw()
 	local char = self.char
 	love.graphics.setColor(1, 1, 1, 1)
@@ -498,14 +269,12 @@ function river:draw()
 	love.graphics.draw(self.bank_l)
 	love.graphics.draw(self.bank_r)
 	love.graphics.draw(self.wet)
-
 	self.shader:send("time", self.time)
 	self.shader:send("speed", char.flow_speed)
 	self.shader:send("foam", char.foam)
 	love.graphics.setShader(self.shader)
 	love.graphics.draw(self.water)
 	love.graphics.setShader()
-
 	draw_streaks(self.channel, self.time, char.flow_speed)
 	if self.show_flow then
 		self:draw_flow()

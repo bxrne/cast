@@ -1,5 +1,6 @@
 ---@diagnostic disable: undefined-global
 
+-- LÖVE window and identity.
 function love.conf(t)
 	t.identity = "cast"
 	t.version = "11.5"
