@@ -7,12 +7,13 @@ local PEAT_SOIL, GRASS = { 0.18, 0.16, 0.10 }, { 0.24, 0.30, 0.14 }
 local BEDS = {
 	{
 		id = "chalk",
-		water = { 0.22, 0.42, 0.50 },
-		water_deep = { 0.08, 0.26, 0.38 },
+		water = { 0.18, 0.36, 0.44 },
+		water_deep = { 0.06, 0.20, 0.30 },
 		bed = { 0.50, 0.48, 0.38 },
 		spot = { 0.38, 0.36, 0.26 },
 		depth_scale = 0.82,
 		pool_contrast = 0.32,
+		expose = 0.6,
 		obs = { rocks = 8, rock_r = 16 },
 	},
 	{
@@ -82,6 +83,7 @@ function palette.make(bed, lush)
 		water_deep = bed.water_deep,
 		bed = bed.bed,
 		spot = bed.spot,
+		expose = bed.expose or 1,
 	}
 end
 
