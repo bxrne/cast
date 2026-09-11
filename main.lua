@@ -3,8 +3,9 @@
 local draw = require "draw"
 local debug_ui = require "ui.debug"
 local fish = require "entity.fish"
+local load_screen = require "ui.splash"
 
-local world, dbg
+local world, dbg, boot
 
 -- Spawn the seeded school for the current river.
 local function spawn_entities()
@@ -25,16 +26,15 @@ local function ctrl(id, kind, get, set, extra)
 	return extra
 end
 
--- Load world, river, entities, and the debug panel. Opening
--- beat is a fresh random seed. Tags start off.
-function love.load()
-	world = { seed = love.math.random(1, 24), paused = false, time_scale = 1, show_fish = false }
-	world.river = draw.river.new({ seed = world.seed })
-	spawn_entities()
+-- Build the debug panel for the current world.
+local function build_panel()
 	dbg = debug_ui.new({
 		controls = {
 			ctrl("seed", "seed", function() return world.seed end, reseed,
 				{ min = 1, max = 24, bed = function() return world.river.char.bed_type.id end }),
+			ctrl("fps", "label", function()
+				return string.format("%d fps", love.timer.getFPS())
+			end, function() end),
 			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
 			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
 			ctrl("current", "float",
@@ -62,9 +62,47 @@ function love.load()
 	})
 end
 
--- Step the sim unless paused. Clamp dt so a hitch never
--- throws fish across the beat.
+-- Load the splash first. Heavy build runs as staged steps so
+-- the bar, the chase, and the wire stay live.
+function love.load()
+	boot = { screen = load_screen.new(), done = 0, total = 5, water = nil }
+end
+
+-- One build step per beat of the step timer.
+local function boot_step()
+	local n = boot.done + 1
+	if n == 1 then
+		local code = love.filesystem.read("draw/water.glsl")
+		assert(code, "draw/water.glsl")
+		boot.water = love.graphics.newShader(code)
+	elseif n == 2 then
+		fish.preload()
+	elseif n == 3 then
+		world = { seed = love.math.random(1, 24), paused = false, time_scale = 1, show_fish = false }
+		world.river = draw.river.new({ seed = world.seed, shader = boot.water })
+	elseif n == 4 then
+		spawn_entities()
+	elseif n == 5 then
+		build_panel()
+	end
+	boot.done = n
+	boot.screen.progress = n / boot.total
+	boot.screen:mark_step()
+end
+
 function love.update(dt)
+	if boot then
+		local w = love.graphics.getWidth()
+		boot.screen:update(dt, w)
+		if boot.screen:step_due() and boot.done < boot.total then
+			boot_step()
+		end
+		if boot.done >= boot.total then
+			world.time = 0
+			boot = nil
+		end
+		return
+	end
 	if world.paused then
 		return
 	end
@@ -74,8 +112,12 @@ function love.update(dt)
 	fish.update(world.fish, dt, world.river, nil)
 end
 
--- Draw world then debug overlay.
+-- Draw splash while booting, world after.
 function love.draw()
+	if boot then
+		boot.screen:draw(love.graphics.getWidth(), love.graphics.getHeight())
+		return
+	end
 	world.river:draw()
 	fish.draw(world.fish, world.river)
 	if world.show_fish then
@@ -86,6 +128,12 @@ end
 
 -- Debug panel keys first; seeds change only from the panel.
 function love.keypressed(key)
+	if boot then
+		if key == "escape" then
+			love.event.quit()
+		end
+		return
+	end
 	if dbg:keypressed(key) then
 		return
 	end
@@ -101,6 +149,9 @@ end
 
 -- Rebuild the river and entities after a resize.
 function love.resize(w, h)
+	if boot then
+		return
+	end
 	world.river:resize(w, h)
 	spawn_entities()
 end

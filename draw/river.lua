@@ -256,7 +256,7 @@ function river.new(opts)
 		height = opts.height or love.graphics.getHeight(),
 		time = 0,
 		show_flow = false,
-		shader = gfx.shader("draw/water.glsl"),
+		shader = opts.shader or gfx.shader("draw/water.glsl"),
 		flow_tex = love.graphics.newCanvas(64, 36),
 		bed_exposure = 1.4,
 		water_sheen = 0.5,

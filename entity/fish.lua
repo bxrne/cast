@@ -333,6 +333,12 @@ local ACT = {
 	rise = { freq = 1.8, amp = 1.3, slide = 0.4, steady = 0.0 },
 }
 
+-- Compile the body shader now. The loader calls this so the
+-- first frames never hitch.
+function fish.preload()
+	bshader()
+end
+
 -- Draw deep fish first. Visibility follows water clarity, column
 -- height, and the feed phase; only a rising fish shows on the film.
 -- The body shader paints dorsal to belly with a flash set by
