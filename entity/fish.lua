@@ -1,11 +1,11 @@
 local bt = require "entity.bt"
 local species = require "entity.species"
 local mind = require "entity.mind"
+local habitat = require "entity.habitat"
 local mathx = require "lib.math"
 
 local fish = {}
 local clamp, hash01, lerp, mix3 = mathx.clamp, mathx.hash01, mathx.lerp, mathx.mix3
-local MAX_SEARCH_T, MAX_SEARCH_A = 24, 7
 local MANNERS = {
 	sip = { duration = 0.55, height = 2.2, ring = 6 },
 	rise = { duration = 1.05, height = 5.5, ring = 12 },
@@ -14,35 +14,13 @@ local MANNERS = {
 	porpoise = { duration = 1.7, height = 7.5, ring = 14 },
 }
 
--- Score a flow sample for this species' lie preference, including depth.
-local function lie_value(sample, spec, river)
-	local edge = math.min(sample.across, 1 - sample.across)
-	local depth_fit = 1 - math.abs(sample.depth_n - spec.depth_pref)
-	return river:lie_score(sample)
-		+ spec.cover_need * sample.pressure * 0.35
-		- (1 - spec.current_tolerance) * sample.speed * 0.4
-		+ spec.edge_bias * (0.35 - edge) * 0.8
-		+ spec.depth_need * depth_fit * 0.9
-end
-
--- Search nearby (t, across) for the best hold. Optional extra score.
+-- Choose a habitat lie. Optional extra(sample) bonus for flee, etc.
 local function pick_lie(self, river, extra)
-	local best, bt_t, ba = -1e9, self.t, self.across
-	for i = 1, MAX_SEARCH_T do
-		local t = clamp(self.t + (i / MAX_SEARCH_T - 0.5) * 0.45, 0.06, 0.94)
-		for j = 1, MAX_SEARCH_A do
-			local across = 0.14 + (j - 1) / (MAX_SEARCH_A - 1) * 0.72
-			local sample = river:sample(t, across)
-			local score = lie_value(sample, self.species, river)
-			if extra then
-				score = score + extra(sample)
-			end
-			if score > best then
-				best, bt_t, ba = score, t, across
-			end
-		end
-	end
-	self.target_t, self.target_across = bt_t, ba
+	local cells = habitat.grid(river)
+	local taken = { { t = self.t, across = self.across } }
+	local pick = habitat.best(cells, self.species, river, extra and {} or taken, extra)
+	self.target_t = pick.t
+	self.target_across = habitat.channel_across(pick.across)
 end
 
 -- Pick a surface manner from the species list using a seeded hash.
@@ -76,7 +54,7 @@ local function move_toward(self, river, dt, pace)
 	end
 	local k = math.min(1, (pace or self.cruise) * dt / dist)
 	self.t = clamp(self.t + dt_t * k, 0.05, 0.95)
-	self.across = clamp(self.across + dt_a * k, 0.12, 0.88)
+	self.across = habitat.channel_across(self.across + dt_a * k)
 	self.at_lie, self.hold_time = false, 0
 	local sample = river:sample(self.t, self.across)
 	self.hx, self.hy = sample.tx, sample.ty
@@ -120,7 +98,7 @@ local function act_bully(ctx)
 		self.chase_t = 0
 		return bt.SUCCESS
 	end
-	self.target_t, self.target_across = other.t, other.across
+	self.target_t, self.target_across = other.t, habitat.channel_across(other.across)
 	move_toward(self, ctx.river, ctx.dt, self.cruise * 1.35)
 	local dx, dy = self.x - other.x, self.y - other.y
 	if dx * dx + dy * dy < 22 * 22 then
@@ -166,10 +144,11 @@ local function act_feed(ctx)
 	self.at_lie = true
 	self.hold_time = self.hold_time + ctx.dt
 	self.hx, self.hy = -sample.tx, -sample.ty
+	self.across = habitat.channel_across(self.home_across or self.across)
 	if self.phase == "nymph" then
-		self.t = clamp(self.t + self.cruise * 0.12 * ctx.dt, 0.05, 0.95)
-		if math.abs(self.t - (self.home_t or self.t)) > 0.045 then
-			self.target_t, self.target_across, self.at_lie = self.home_t, self.across, false
+		self.t = clamp(self.t + sample.speed * ctx.dt * 0.032, 0.05, 0.95)
+		if math.abs(self.t - (self.home_t or self.t)) > 0.05 then
+			self.target_t, self.target_across, self.at_lie = self.home_t, self.home_across, false
 		end
 	end
 	return bt.SUCCESS
@@ -195,30 +174,34 @@ local function sync_pose(self, river)
 	end
 end
 
--- Spawn a seeded school in [0, 24].
+-- Spawn a seeded school on ranked habitat lies, already holding.
 function fish.spawn(river, seed, count)
 	count = mathx.clamp(math.floor(count or 10), 0, 24)
+	local specs = {}
+	for i = 1, count do
+		specs[i] = species.at(math.floor(hash01(seed, i, 3) * #species.list) + 1)
+	end
+	local spots = habitat.place(river, specs)
 	local list = {}
 	for i = 1, count do
-		local spec = species.at(math.floor(hash01(seed, i, 3) * #species.list) + 1)
+		local spec, spot = specs[i], spots[i]
 		local u = hash01(seed, i, 9)
 		local length = spec.length_cm[1] + u * (spec.length_cm[2] - spec.length_cm[1])
-		local t = 0.08 + hash01(seed, i, 17) * 0.84
+		local across = habitat.channel_across(spot.across)
 		local self = {
 			kind = "fish", id = i, seed = seed, species = spec, length = length,
-			t = t, across = 0.2 + hash01(seed, i, 21) * 0.6,
-			home_t = t, column = spec.depth_pref * 0.3 + 0.1,
-			at_lie = false, rises = 0, spook_t = 0, chase_t = 0, clock = 0,
+			t = spot.t, across = across,
+			home_t = spot.t, home_across = across, column = 0.2,
+			at_lie = true, rises = 0, spook_t = 0, chase_t = 0, clock = 0,
 			phase_off = hash01(seed, i, 41) * spec.feed_period,
 			hold_time = hash01(seed, i, 29) * spec.surface_period * 0.4,
 			cruise = spec.cruise * (0.75 + 0.4 * (length / spec.length_cm[2])),
 			period = spec.surface_period * (0.7 + 0.5 * (length - spec.length_cm[1]) / (spec.length_cm[2] - spec.length_cm[1])),
 			tree = bt.clone(tree()),
 		}
-		sync_pose(self, river)
 		self.phase = mind.phase(self)
-		pick_lie(self, river)
-		self.home_t = self.target_t or t
+		self.column = mind.column_target(self, self.phase)
+		sync_pose(self, river)
 		list[i] = self
 	end
 	return list
@@ -234,7 +217,7 @@ function fish.update(list, dt, river, player)
 		mind.approach_column(self, mind.column_target(self, self.phase), dt)
 		sync_pose(self, river)
 		if self.at_lie then
-			self.home_t = self.t
+			self.home_t, self.home_across = self.t, self.across
 		end
 	end
 end
@@ -273,15 +256,15 @@ function fish.draw(list)
 	end
 end
 
--- Debug dots for lie quality.
+-- Debug dots for habitat score using a mid-tolerance brown trout curve.
 function fish.draw_lies(river)
+	local spec = species.by_id.brown
 	love.graphics.setPointSize(4)
-	for i = 1, 18 do
-		for j = 1, 6 do
-			local sample = river:sample((i - 0.5) / 18, j / 7)
-			love.graphics.setColor(0.95, 0.75, 0.2, math.min(0.7, river:lie_score(sample) * 0.25))
-			love.graphics.points(sample.x, sample.y)
-		end
+	local cells = habitat.grid(river)
+	for i = 1, #cells do
+		local sample = cells[i]
+		love.graphics.setColor(0.95, 0.75, 0.2, math.min(0.75, habitat.score(sample, spec, river) * 0.55))
+		love.graphics.points(sample.x, sample.y)
 	end
 end
 
