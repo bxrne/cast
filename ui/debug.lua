@@ -20,17 +20,24 @@ local function format_value(ctrl)
 end
 
 local function nudge(ctrl, dir)
-	local v = ctrl.get()
 	if ctrl.kind == "bool" then
-		ctrl.set(not v)
+		ctrl.set(not ctrl.get())
 		return
 	end
-	local step = ctrl.step or 1
-	if ctrl.kind == "float" then
-		v = v + dir * step
-	else
-		v = v + dir * step
+	if ctrl.kind == "seed" then
+		local lo = ctrl.min or 1
+		local hi = ctrl.max or 999999
+		local cur = ctrl.get()
+		local v = love.math.random(lo, hi)
+		if v == cur then
+			v = lo + (cur - lo + 1) % (hi - lo + 1)
+		end
+		ctrl.set(v)
+		return
 	end
+	local v = ctrl.get()
+	local step = ctrl.step or 1
+	v = v + dir * step
 	if ctrl.min then
 		v = math.max(ctrl.min, v)
 	end
@@ -124,7 +131,7 @@ function debug:draw()
 
 	local fy = y + h - PAD - ROW_H
 	love.graphics.setColor(0.50, 0.49, 0.38)
-	love.graphics.print("arrows adjust   R seed   WASD walk", x + PAD, fy)
+	love.graphics.print("arrows adjust   R roll seed   WASD walk", x + PAD, fy)
 	love.graphics.pop()
 end
 

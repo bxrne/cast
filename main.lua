@@ -35,7 +35,7 @@ function love.load()
 			{
 				id = "seed",
 				label = "seed",
-				kind = "int",
+				kind = "seed",
 				min = 1,
 				max = 999999,
 				get = function()
@@ -59,8 +59,8 @@ function love.load()
 				label = "time scale",
 				kind = "float",
 				min = 0,
-				max = 3,
-				step = 0.1,
+				max = 8,
+				step = 0.25,
 				get = function()
 					return world.time_scale
 				end,
@@ -133,7 +133,11 @@ function love.keypressed(key)
 		return
 	end
 	if key == "r" then
-		reseed(world.seed + 1)
+		local s = love.math.random(1, 999999)
+		if s == world.seed then
+			s = world.seed % 999999 + 1
+		end
+		reseed(s)
 	elseif key == "escape" then
 		love.event.quit()
 	end
