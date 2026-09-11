@@ -85,6 +85,7 @@ local function act_flee(ctx)
 	if self.spook_t <= 0 then
 		return bt.FAILURE
 	end
+	self.activity = "burst"
 	self.spook_t = self.spook_t - ctx.dt
 	if not self.target_t then
 		local player = ctx.player
@@ -113,6 +114,7 @@ local function act_bully(ctx)
 		self.chase_t = 0
 		return bt.SUCCESS
 	end
+	self.activity = "chase"
 	self.target_t, self.target_across = other.t, habitat.channel_across(other.across)
 	move_toward(self, ctx.river, ctx.dt, self.cruise * 1.35)
 	local dx, dy = self.x - other.x, self.y - other.y
@@ -133,6 +135,7 @@ local function act_rise(ctx)
 		local name = pick_manner(self)
 		local spec = MANNERS[name]
 		self.surface = { t = 0, duration = spec.duration, height = spec.height, ring = spec.ring, name = name }
+		self.activity = "rise"
 		breach_fx(ctx.river, self, spec)
 	end
 	self.surface.t = self.surface.t + ctx.dt
@@ -152,6 +155,7 @@ local function act_seek(ctx)
 	if self.at_lie then
 		return bt.FAILURE
 	end
+	self.activity = "cruise"
 	if not self.target_t then
 		pick_lie(self, ctx.river)
 	end
@@ -166,6 +170,13 @@ local function act_feed(ctx)
 	self.hold_time = self.hold_time + ctx.dt
 	self.hx, self.hy = -SCRATCH.tx, -SCRATCH.ty
 	self.across = habitat.channel_across(self.home_across or self.across)
+	if self.phase == "rest" then
+		self.activity = "rest"
+	elseif self.phase == "nymph" then
+		self.activity = "drift"
+	else
+		self.activity = "hold"
+	end
 	if self.phase == "nymph" then
 		self.t = clamp(self.t + SCRATCH.speed * ctx.dt * 0.032, 0.05, 0.95)
 		if math.abs(self.t - (self.home_t or self.t)) > 0.05 then
@@ -231,7 +242,8 @@ function fish.spawn(river, seed, count)
 			hold_time = hash01(seed, i, 29) * spec.surface_period * 0.4,
 			cruise = spec.cruise * (0.75 + 0.4 * (length / spec.length_cm[2])),
 			period = spec.surface_period * (0.7 + 0.5 * (length - spec.length_cm[1]) / (spec.length_cm[2] - spec.length_cm[1])),
-			ripple_t = hash01(seed, i, 55) * 0.8,
+			dimple_t = 2 + hash01(seed, i, 55) * 6,
+			activity = "hold",
 			tree = bt.clone(tree()),
 		}
 		self.phase = mind.phase(self)
@@ -243,17 +255,20 @@ function fish.spawn(river, seed, count)
 	return list
 end
 
--- Tail ripple near the film. Beat rate follows the taxon.
-local function tail_ripple(self, river, dt)
-	if self.surface or self.column < 0.55 then return end
-	self.ripple_t = self.ripple_t - dt
-	if self.ripple_t > 0 then return end
-	local beat = self.species.beat or 4
-	self.ripple_t = (1 / beat) * (1.4 + hash01(self.id, math.floor(self.clock * beat), 77))
+-- Rare faint dimple from a holding fish near the film. No
+-- wake while swimming. One touch, at most two.
+local function dimple(self, river, dt)
+	if self.surface or not self.at_lie then return end
+	if self.column < 0.7 then return end
+	if self.activity ~= "hold" and self.activity ~= "drift" then return end
+	self.dimple_t = (self.dimple_t or 5) - dt
+	if self.dimple_t > 0 then return end
+	self.dimple_t = 4 + hash01(self.id, math.floor(self.clock), 77) * 5
 	if river.splash then
-		local tx = self.x - (self.hx or 1) * self.length * 0.2
-		local ty = self.y - (self.hy or 0) * self.length * 0.2
-		river.splash:ring(tx, ty, 4 + self.column * 5, 0.55)
+		river.splash:dimple(self.x, self.y - 1, 3 + hash01(self.id, self.rises + 1, 5) * 2)
+		if hash01(self.id, self.rises, 11) < 0.3 then
+			river.splash:dimple(self.x + 5, self.y + 2, 2.5)
+		end
 	end
 end
 
@@ -265,7 +280,7 @@ function fish.update(list, dt, river, player)
 		self.phase = mind.phase(self)
 		bt.tick(self.tree, { fish = self, river = river, dt = dt, player = player, list = list })
 		mind.approach_column(self, mind.column_target(self, self.phase), dt)
-		tail_ripple(self, river, dt)
+		dimple(self, river, dt)
 		local ot, oa = self.t, self.across
 		self.t, self.across = river:push_out(self.t, self.across)
 		sync_pose(self, river, true)
@@ -289,6 +304,18 @@ local function segment(self, s, len, phase, slither, tail_amp)
 	return along, lat, w
 end
 
+-- Swim effort by activity. Freq scales beat, amp scales tail.
+-- Slow holds show body slither. Bursts go tail driven.
+local ACT = {
+	rest = { freq = 0.45, amp = 0.25, slide = 1.0 },
+	drift = { freq = 0.7, amp = 0.45, slide = 1.0 },
+	hold = { freq = 0.7, amp = 0.4, slide = 1.0 },
+	cruise = { freq = 1.25, amp = 0.95, slide = 0.6 },
+	chase = { freq = 1.7, amp = 1.25, slide = 0.35 },
+	burst = { freq = 2.0, amp = 1.4, slide = 0.3 },
+	rise = { freq = 1.8, amp = 1.3, slide = 0.4 },
+}
+
 -- Draw deep fish first. Visibility follows water clarity, column
 -- height, and the feed phase; only a rising fish shows on the film.
 function fish.draw(list, river)
@@ -304,10 +331,10 @@ function fish.draw(list, river)
 		local lift, vis = 0, math.max(0.04, col ^ 1.4 * (0.2 + 0.8 * clar))
 		local ang = math.atan2(self.hy, self.hx)
 		local beat = self.species.beat or 4
-		local move = self.at_lie and 0.35 or 1.0
-		local phase = self.clock * beat * 6.283 + self.id * 1.7
-		local slither = self.species.slither or 0.3
-		local tail_amp = (self.species.tail_amp or 0.8) * move + 0.15
+		local act = ACT[self.activity] or ACT.hold
+		local phase = self.clock * beat * act.freq * 6.283 + self.id * 1.7
+		local slither = (self.species.slither or 0.3) * act.slide
+		local tail_amp = (self.species.tail_amp or 0.8) * act.amp + 0.1
 		if self.surface and col > 0.7 then
 			local u = self.surface.t / self.surface.duration
 			local arch = math.sin(u * math.pi)

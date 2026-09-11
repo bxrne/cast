@@ -60,6 +60,11 @@ function splash:ring(x, y, r1, life)
   push(self, 1, x, y, 0, 0, life or 0.8, 2, r1 or 10)
 end
 
+-- Faint dimple. One soft touch of the film, not a wake.
+function splash:dimple(x, y, r)
+  push(self, 3, x, y, 0, 0, 1.1, 1, r or 4)
+end
+
 -- Flying drop with velocity.
 function splash:drop(x, y, vx, vy, life, r)
   push(self, 2, x, y, vx, vy, life or 0.45, r or 1.6, r or 1.6)
@@ -100,6 +105,11 @@ function splash:draw()
     if self.kind[i] == 1 then
       local r = self.r0[i] + (self.r1[i] - self.r0[i]) * u
       love.graphics.setColor(0.88, 0.92, 0.86, 0.42 * (1 - u))
+      love.graphics.setLineWidth(1)
+      love.graphics.ellipse("line", self.x[i], self.y[i], r, r * 0.55)
+    elseif self.kind[i] == 3 then
+      local r = self.r0[i] + (self.r1[i] - self.r0[i]) * u
+      love.graphics.setColor(0.88, 0.92, 0.86, 0.16 * (1 - u))
       love.graphics.setLineWidth(1)
       love.graphics.ellipse("line", self.x[i], self.y[i], r, r * 0.55)
     else
