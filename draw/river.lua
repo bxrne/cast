@@ -231,7 +231,7 @@ function river:rebuild()
 	gfx.release_all(self.bank_l, self.bank_r, self.wet_l, self.wet_r, self.water, self.ground, self.bank_tex)
 	local char = character(self.seed, self.width, self.height)
 	local pts = centerline(char, self.width, self.height)
-	local field = flow.build(pts, char.flow_speed, char.bed_type)
+	local field = flow.build(pts, char.flow_speed, char.bed_type, self.seed)
 	local channel = rails(pts, char, field)
 	self.char, self.flow, self.channel = char, field, channel
 	self.ground = ground_canvas(self.seed, self.width, self.height, char)
@@ -264,9 +264,15 @@ function river:update(dt)
 	self.time = self.time + dt
 end
 
--- Sample flow at parametric (t, across).
+-- Sample flow at parametric (t, across). Geometry only, used by
+-- habitat scoring and the shore pose.
 function river:sample(t, across)
 	return flow.sample(self.flow, t, across)
+end
+
+-- Animated sample for entities: heading and speed pick up the eddies.
+function river:sample_live(t, across)
+	return flow.sample(self.flow, t, across, self.time)
 end
 
 -- Lie quality at a flow sample.

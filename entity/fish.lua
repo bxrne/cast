@@ -140,7 +140,7 @@ end
 
 -- Hold, nymph-drift, or rest according to feed phase.
 local function act_feed(ctx)
-	local self, sample = ctx.fish, ctx.river:sample(ctx.fish.t, ctx.fish.across)
+	local self, sample = ctx.fish, ctx.river:sample_live(ctx.fish.t, ctx.fish.across)
 	self.at_lie = true
 	self.hold_time = self.hold_time + ctx.dt
 	self.hx, self.hy = -sample.tx, -sample.ty
@@ -165,9 +165,9 @@ local function tree()
 	})
 end
 
--- Copy world pose from the flow field.
+-- Copy world pose from the flow field, with live eddy headings.
 local function sync_pose(self, river)
-	local sample = river:sample(self.t, self.across)
+	local sample = river:sample_live(self.t, self.across)
 	self.x, self.y, self.sample = sample.x, sample.y, sample
 	if not self.hx then
 		self.hx, self.hy = -sample.tx, -sample.ty
