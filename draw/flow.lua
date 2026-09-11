@@ -72,8 +72,9 @@ local function turbulence(field, t, across, kappa, time)
 end
 
 -- Build a sampleable flow field from centerline stations and a bed.
--- Seed drives the eddy cluster placement.
-function flow.build(pts, base_speed, bed, seed)
+-- Seed drives the eddy cluster placement; obstacles add their wakes
+-- and shade to the field.
+function flow.build(pts, base_speed, bed, seed, obstacles)
 	bed = bed or { depth_scale = 1, pool_contrast = 0.5 }
 	local n, mean_hw, step = #pts, 0, (1 / math.max(1, #pts - 1))
 	for i = 1, n do
@@ -103,7 +104,29 @@ function flow.build(pts, base_speed, bed, seed)
 	end
 	local field = { stations = stations, base_speed = base_speed, bed = bed }
 	field.turbulent = seed and build_clusters(seed, CLUSTERS) or nil
+	field.obstacles = obstacles or nil
 	return field
+end
+
+-- Wake and shade from the obstacle field. A rock slows the lanes
+-- downstream of it (the slack trout lie) and casts cover around it.
+local function obstacles_at(list, t, across)
+	local wake, shade = 0, 0
+	for i = 1, #list do
+		local o = list[i]
+		local dt = (t - o.t) / o.wt
+		local da = (across - o.across) / o.dw
+		if dt > -0.06 and dt < 1.05 and math.abs(da) < 1.25 then
+			local lat = 1 - math.min(1, math.abs(da))
+			local down = 1 - math.max(0, dt)
+			wake = wake + lat * down
+		end
+		local d = math.sqrt(dt * dt + da * da * 0.35)
+		if d < 2.0 then
+			shade = shade + (1 - d / 2.0) * o.shade
+		end
+	end
+	return clamp(wake, 0, 1.4), clamp(shade, 0, 1)
 end
 
 -- Neighbour stations and blend factor for t in [0, 1].
@@ -153,8 +176,15 @@ function flow.sample(field, t, across, time)
 	local s_in = speed_across(field.base_speed, st, clamp(across - 0.08, 0, 1), st.width_scale)
 	local s_out = speed_across(field.base_speed, st, clamp(across + 0.08, 0, 1), st.width_scale)
 	local eddy, spin = 0, 0
+	local wake, shade = 0, 0
+	if field.obstacles then
+		wake, shade = obstacles_at(field.obstacles, t, across)
+		speed = speed * (1 - 0.5 * wake)
+	end
 	if time then
 		eddy, spin = turbulence(field, t, across, st.kappa, time)
+		eddy = eddy + wake * 0.3
+		spin = spin + wake * 0.28 * math.sin(time * 3.1 + t * 13.0)
 		speed = speed * (1 + eddy * 0.12)
 	end
 	if spin ~= 0 then -- rotate heading into the swirl, keep the pose fixed
@@ -171,6 +201,7 @@ function flow.sample(field, t, across, time)
 		seam = math.abs(s_out - s_in), -- shear between neighbouring lanes
 		pool = st.pool,
 		eddy = eddy,
+		shade = shade,
 	}
 end
 

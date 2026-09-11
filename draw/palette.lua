@@ -13,6 +13,7 @@ local BEDS = {
 		spot = { 0.52, 0.50, 0.38 },
 		depth_scale = 0.82,
 		pool_contrast = 0.32,
+		obs = { rocks = 8, rock_r = 16 },
 	},
 	{
 		id = "peat",
@@ -22,6 +23,7 @@ local BEDS = {
 		spot = { 0.28, 0.20, 0.12 },
 		depth_scale = 1.18,
 		pool_contrast = 0.72,
+		obs = { rocks = 6, rock_r = 20 },
 	},
 	{
 		id = "gravel",
@@ -31,6 +33,7 @@ local BEDS = {
 		spot = { 0.58, 0.50, 0.32 },
 		depth_scale = 1.0,
 		pool_contrast = 0.55,
+		obs = { rocks = 12, rock_r = 17 },
 	},
 	{
 		id = "silt",
@@ -40,6 +43,7 @@ local BEDS = {
 		spot = { 0.30, 0.36, 0.20 },
 		depth_scale = 0.88,
 		pool_contrast = 0.22,
+		obs = { rocks = 5, rock_r = 15 },
 	},
 	{
 		id = "bedrock",
@@ -49,6 +53,7 @@ local BEDS = {
 		spot = { 0.18, 0.20, 0.24 },
 		depth_scale = 1.22,
 		pool_contrast = 0.8,
+		obs = { rocks = 16, rock_r = 22 },
 	},
 }
 

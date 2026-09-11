@@ -1,5 +1,7 @@
 local flow = require "draw.flow"
 local palette = require "draw.palette"
+local obstacle = require "draw.obstacle"
+local foam = require "draw.foam"
 local mathx = require "lib.math"
 local gfx = require "lib.gfx"
 
@@ -221,6 +223,7 @@ function river.new(opts)
 		time = 0,
 		show_flow = false,
 		shader = gfx.shader("draw/water.glsl"),
+		foam = foam.new(),
 	}, river)
 	self:rebuild()
 	return self
@@ -231,9 +234,13 @@ function river:rebuild()
 	gfx.release_all(self.bank_l, self.bank_r, self.wet_l, self.wet_r, self.water, self.ground, self.bank_tex)
 	local char = character(self.seed, self.width, self.height)
 	local pts = centerline(char, self.width, self.height)
-	local field = flow.build(pts, char.flow_speed, char.bed_type, self.seed)
+	self.obstacles = obstacle.generate(self.seed, char)
+	local field = flow.build(pts, char.flow_speed, char.bed_type, self.seed, self.obstacles)
 	local channel = rails(pts, char, field)
 	self.char, self.flow, self.channel = char, field, channel
+	local x0, y0, x1, y1 = pts[1].x, pts[1].y, pts[#pts].x, pts[#pts].y
+	self.len_inv = 1 / math.max(1, math.sqrt((x1 - x0) ^ 2 + (y1 - y0) ^ 2))
+	self.foam:reset()
 	self.ground = ground_canvas(self.seed, self.width, self.height, char)
 	self.bank_tex = bank_tile(self.seed)
 	self.bank_l = strip(channel.bank_lo, channel.bank_li)
@@ -259,9 +266,10 @@ function river:resize(width, height)
 	self:rebuild()
 end
 
--- Advance water animation.
+-- Advance water animation and drift the foam.
 function river:update(dt)
 	self.time = self.time + dt
+	self.foam:update(dt, self)
 end
 
 -- Sample flow at parametric (t, across). Geometry only, used by
@@ -280,15 +288,24 @@ function river:lie_score(sample)
 	return flow.lie_score(sample)
 end
 
--- Draw velocity arrows for the debug overlay.
+-- Draw velocity arrows for the debug overlay. Lives on top of the
+-- eddy field and adds a light noise wobble so the indicators move.
 function river:draw_flow()
+	local n_t, n_a = 22, 7
 	love.graphics.setLineWidth(1.5)
-	for i = 1, 20 do
-		for j = 1, 5 do
-			local s = flow.sample(self.flow, (i - 0.5) / 20, j / 6)
+	for i = 1, n_t do
+		local t = (i - 0.5) / n_t
+		for j = 1, n_a do
+			local across = (j - 0.5) / n_a
+			local s = flow.sample(self.flow, t, across, self.time)
+			local nse = 0.10 * math.sin(self.time * 2.6 + t * 41 + across * 29)
+			    + 0.07 * math.sin(self.time * 4.1 + t * 83 + across * 57)
 			local k = s.speed / self.flow.base_speed
 			love.graphics.setColor(0.2 + k * 0.6, 0.55, 0.85 - k * 0.4, 0.75)
-			love.graphics.line(s.x, s.y, s.x + s.tx * (10 + s.speed * 14), s.y + s.ty * (10 + s.speed * 14))
+			local tip = 10 + (s.speed + nse * 4) * 14
+			local c, sn = math.cos(nse), math.sin(nse)
+			local ex, ey = s.tx * c - s.ty * sn, s.tx * sn + s.ty * c
+			love.graphics.line(s.x, s.y, s.x + ex * tip, s.y + ey * tip)
 		end
 	end
 end
@@ -310,6 +327,9 @@ function river:draw()
 	love.graphics.setColor(1, 1, 1, 1)
 	love.graphics.draw(self.wet_l)
 	love.graphics.draw(self.wet_r)
+	-- Foam first so rocks always sit on top of the film.
+	self.foam:draw(self)
+	obstacle.draw(self.obstacles, self)
 	draw_streaks(self.channel, self.time, char.flow_speed)
 	if self.show_flow then
 		self:draw_flow()

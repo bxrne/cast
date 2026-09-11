@@ -36,7 +36,7 @@ local function si_depth(sample, spec)
 	return 0.08 + 0.92 * tent(sample.depth_n, 0.04, peak, math.min(1, peak + 0.55))
 end
 
--- Cover SI from seams, inside of bends, and bank shade.
+-- Cover SI from seams, inside of bends, bank shade, and obstacles.
 local function si_cover(sample, spec)
 	local edge = math.min(sample.across, 1 - sample.across)
 	local seam = sample.seam / (sample.speed + 0.25)
@@ -46,7 +46,9 @@ local function si_cover(sample, spec)
 	elseif sample.kappa < -0.02 and sample.across > 0.52 then
 		inside = 1
 	end
-	return clamp(0.15 + 0.45 * seam + 0.3 * inside + spec.edge_bias * (0.32 - edge), 0.04, 1)
+	local shade = sample.shade or 0
+	return clamp(0.15 + 0.45 * seam + 0.3 * inside + spec.edge_bias * (0.32 - edge)
+		+ 0.55 * shade * spec.cover_need, 0.04, 1)
 end
 
 -- Hughes–Dill style net energy: drift in the next lane minus hold cost.
