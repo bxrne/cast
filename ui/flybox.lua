@@ -5,9 +5,8 @@ local flybox = {}
 flybox.__index = flybox
 
 local BTN = { x = 16, y = 16, w = 132, h = 38 }
-local ROW_H = 44
-local LIST_W = 240
-local FLY_PAD = 30 -- half-size of the fly preview square
+local ROW_H = 36
+local LIST_W = 200
 
 function flybox.new()
 	local fonts = require("ui.fonts").get()
@@ -15,6 +14,10 @@ function flybox.new()
 		open = false, selected = 1, scroll = 0,
 		font = fonts.mono, head = fonts.head, body = fonts.body,
 	}, flybox)
+end
+
+function flybox:toggle()
+	self.open = not self.open
 end
 
 -- True when x, y lands in the button.
@@ -62,7 +65,7 @@ function flybox:mousepressed(x, y)
 		self.open = false
 		return false
 	end
-	-- Row pick in the scrollable list column.
+	-- Row pick in the list column.
 	local ly = d.y + 40 - self.scroll
 	if x <= d.x + LIST_W + 8 then
 		local i = math.floor((y - ly) / ROW_H) + 1
@@ -115,16 +118,6 @@ local function button(self)
 	love.graphics.printf("Fly Box", BTN.x, BTN.y + 10, BTN.w, "center")
 end
 
--- Draw a small framed square behind each fly in the list.
-local function fly_thumb(x, y, f)
-	local s = FLY_PAD
-	love.graphics.setColor(dbg_theme.BG[1], dbg_theme.BG[2], dbg_theme.BG[3], 0.6)
-	love.graphics.rectangle("fill", x - s, y - s, s * 2, s * 2, 2, 2)
-	love.graphics.setColor(dbg_theme.EDGE[1], dbg_theme.EDGE[2], dbg_theme.EDGE[3], 0.45)
-	love.graphics.setLineWidth(1)
-	love.graphics.rectangle("line", x - s, y - s, s * 2, s * 2, 2, 2)
-end
-
 local function list_col(self, d)
 	local list = tackle.list
 	love.graphics.setFont(self.font)
@@ -137,42 +130,45 @@ local function list_col(self, d)
 		local ry = ly + (i - 1) * ROW_H
 		if i == self.selected then
 			love.graphics.setColor(dbg_theme.HI[1], dbg_theme.HI[2], dbg_theme.HI[3], 0.95)
-			love.graphics.rectangle("fill", d.x + 6, ry, LIST_W - 12, ROW_H - 4, 3, 3)
+			love.graphics.rectangle("fill", d.x + 6, ry, LIST_W - 12, ROW_H - 2, 3, 3)
 		end
-		-- Framed square behind the fly.
-		local thumb_x, thumb_y = d.x + 36, ry + (ROW_H - 4) / 2
-		fly_thumb(thumb_x, thumb_y, list[i])
-		love.graphics.push()
-		love.graphics.translate(thumb_x, thumb_y)
-		tackle.draw(list[i], list[i].s * 0.45)
-		love.graphics.pop()
 		love.graphics.setFont(self.body)
 		love.graphics.setColor(dbg_theme.TEXT[1], dbg_theme.TEXT[2], dbg_theme.TEXT[3], 1)
-		love.graphics.print(list[i].name, d.x + 64, ry + 4)
+		love.graphics.print(list[i].name, d.x + 14, ry + 3)
 		love.graphics.setColor(dbg_theme.DIM[1], dbg_theme.DIM[2], dbg_theme.DIM[3], 1)
-		love.graphics.print(list[i].kind, d.x + 64, ry + 22)
+		love.graphics.print(list[i].kind, d.x + 14, ry + 18)
 	end
 	love.graphics.setScissor()
 end
 
--- Detail column layout computed from drawer height, not hardcoded.
+-- Detail column: large framed fly preview with text below.
 local function detail_col(self, d)
 	local f = tackle.list[self.selected]
-	local x = d.x + LIST_W + 20
-	local col_w = d.x + d.w - x - 16
+	local x = d.x + LIST_W + 16
+	local col_w = d.x + d.w - x - 12
 	-- Divider line.
 	love.graphics.setColor(dbg_theme.EDGE[1], dbg_theme.EDGE[2], dbg_theme.EDGE[3], 0.6)
-	love.graphics.line(x - 10, d.y + 10, x - 10, d.y + d.h - 10)
-	-- Fly drawing centered in upper portion.
-	local scale = f.kind == "streamer" and 1.0 or (f.kind == "dry" and 1.3 or 1.8)
-	local fly_cy = d.y + d.h * 0.30
+	love.graphics.line(x - 8, d.y + 10, x - 8, d.y + d.h - 10)
+	-- Framed preview box in the upper portion.
+	local box_h = d.h * 0.50
+	local box_cx = x + col_w / 2
+	local box_cy = d.y + 28 + box_h / 2
+	local box_w = col_w - 16
+	love.graphics.setColor(dbg_theme.BG[1], dbg_theme.BG[2], dbg_theme.BG[3], 0.5)
+	love.graphics.rectangle("fill", box_cx - box_w / 2, box_cy - box_h / 2, box_w, box_h, 3, 3)
+	love.graphics.setColor(dbg_theme.EDGE[1], dbg_theme.EDGE[2], dbg_theme.EDGE[3], 0.45)
+	love.graphics.setLineWidth(1)
+	love.graphics.rectangle("line", box_cx - box_w / 2, box_cy - box_h / 2, box_w, box_h, 3, 3)
+	-- Fly drawing scaled to fill the box.
+	local base_s = f.kind == "streamer" and 1.2 or (f.kind == "dry" and 1.6 or 2.2)
+	local scale = base_s * math.min(box_w / 100, box_h / 80)
 	love.graphics.push()
-	love.graphics.translate(x + col_w / 2, fly_cy)
+	love.graphics.translate(box_cx, box_cy)
 	tackle.draw(f, scale)
 	love.graphics.pop()
-	-- Text anchored from the bottom third, spacing derived from d.h.
-	local text_top = d.y + d.h * 0.54
-	local line_h = math.max(16, d.h * 0.06)
+	-- Text below the box, spacing from d.h.
+	local text_top = box_cy + box_h / 2 + 12
+	local line_h = math.max(16, d.h * 0.055)
 	love.graphics.setFont(self.head)
 	love.graphics.setColor(dbg_theme.TEXT[1], dbg_theme.TEXT[2], dbg_theme.TEXT[3], 1)
 	love.graphics.printf(f.name, x, text_top, col_w, "left")

@@ -165,6 +165,11 @@ function love.keypressed(key)
 	if dbg:keypressed(key) then
 		return
 	end
+	-- f toggles the fly box.
+	if key == "f" then
+		flybox:toggle()
+		return
+	end
 	-- Esc closes the drawer. Nothing quits the game by key.
 	if key == "escape" then
 		flybox.open = false
