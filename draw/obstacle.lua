@@ -2,7 +2,7 @@ local mathx = require "lib.math"
 local palette = require "draw.palette"
 
 local obstacle = {}
-local clamp, mix3, mix3r, TAU = mathx.clamp, mathx.mix3, mathx.mix3r, mathx.TAU
+local clamp, lerp, mix3, mix3r, TAU = mathx.clamp, mathx.lerp, mathx.mix3, mathx.mix3r, mathx.TAU
 local LICHEN_PALE = { 0.62, 0.64, 0.50 }
 local LICHEN_RUST = { 0.72, 0.50, 0.30 }
 
@@ -117,8 +117,8 @@ end
 local function draw_rock(o, s, char, emergent)
 	local deep = char.water_deep
 	if not emergent then
-		local r, g, b = mix3r(mix3r(palette.STONE, char.gravel, 0.5), deep, 0.55)
-		love.graphics.setColor(r, g, b, 0.85)
+		local ir, ig, ib = mix3r(palette.STONE, char.gravel, 0.5)
+		love.graphics.setColor(lerp(ir, deep[1], 0.55), lerp(ig, deep[2], 0.55), lerp(ib, deep[3], 0.55), 0.85)
 		love.graphics.polygon("fill", o.poly)
 		return
 	end
