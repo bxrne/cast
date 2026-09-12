@@ -9,7 +9,7 @@ function persist.save(t)
 	for k, v in pairs(t) do
 		lines[#lines + 1] = tostring(k) .. "=" .. tostring(v)
 	end
-	love.filesystem.write(table.concat(lines, "\n"))
+	love.filesystem.write(PATH, table.concat(lines, "\n"))
 end
 
 function persist.load()
