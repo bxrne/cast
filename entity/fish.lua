@@ -89,21 +89,29 @@ local function breach_fx(river, self, spec)
 	end
 end
 
--- Bolt deep and away from the player while spooked.
+-- Bolt deep and away from the player or a bird while spooked.
 local function act_flee(ctx)
 	local self = ctx.fish
 	if mind.spooked(self, ctx.player, ctx.river) then
 		self.spook_t = math.max(self.spook_t, 1.1 + self.species.skittish)
 	end
+	local bird = mind.bird_threat(self, ctx.birds, ctx.river)
+	if bird then
+		self.spook_t = math.max(self.spook_t, 1.4 + self.species.skittish * 0.8)
+	end
 	if self.spook_t <= 0 then
 		return bt.FAILURE
 	end
 	self.activity = "burst"
+	self.hunting = nil
 	self.spook_t = self.spook_t - ctx.dt
 	if not self.target_t then
 		local player = ctx.player
 		pick_lie(self, ctx.river, function(sample)
 			local away = player and math.abs(sample.t - player.t) or 0
+			if bird and bird.t then
+				away = away + math.abs(sample.t - bird.t) * 1.2
+			end
 			return sample.depth_n * 1.4 + away * 0.8
 		end)
 	end
@@ -135,6 +143,90 @@ local function act_bully(ctx)
 		other.spook_t = math.max(other.spook_t, 1.3)
 		other.at_lie, other.target_t = false, nil
 	end
+	return bt.RUNNING
+end
+
+-- Nearest catchable fly in screen space, or nil. Only
+-- swarm and skitter flies read. Taken flies are ignored.
+local function nearest_fly(self, insects, radius)
+	if not insects then
+		return nil
+	end
+	local bd, hit = radius, nil
+	for i = 1, #insects do
+		local f = insects[i]
+		if (f.state == "swarm" or f.state == "skitter") and f.x then
+			local dx, dy = self.x - f.x, self.y - f.y
+			local d = math.sqrt(dx * dx + dy * dy)
+			if d < bd then
+				bd, hit = d, f
+			end
+		end
+	end
+	return hit
+end
+
+-- Hunt a live fly when the phase allows it. Film fish gulp
+-- skitter flies off the film. Airborne swarm flies draw a
+-- jump that often misses. The take plays as a surface clip
+-- and lands in ctx.events for the flies to answer.
+local function act_take(ctx)
+	local self = ctx.fish
+	if self.take_clip and self.surface then
+		self.surface.t = self.surface.t + ctx.dt
+		if self.surface.t >= self.surface.duration then
+			if ctx.river.splash then
+				ctx.river.splash:ring(self.x, self.y, self.surface.ring * 0.7, 0.6)
+			end
+			self.surface, self.take_clip, self.hunting, self.hold_time = nil, nil, nil, 0
+			if self.take_kind == "gulp" then
+				self.rises = self.rises + 1
+			end
+			self.take_kind = nil
+			return bt.SUCCESS
+		end
+		return bt.RUNNING
+	end
+	if self.surface then
+		return bt.FAILURE
+	end
+	if self.spook_t > 0 or (self.phase ~= "film" and self.phase ~= "emerge") then
+		self.hunting = nil
+		return bt.FAILURE
+	end
+	if self.column < 0.5 then
+		self.hunting = nil
+		return bt.FAILURE
+	end
+	local radius = self.phase == "film" and 95 or 60
+	local fly = nearest_fly(self, ctx.insects, radius)
+	if not fly then
+		self.hunting = nil
+		return bt.FAILURE
+	end
+	local dx, dy = self.x - fly.x, self.y - fly.y
+	if dx * dx + dy * dy > 16 * 16 then
+		self.hunting = true
+		self.activity = "cruise"
+		self.target_t, self.target_across = fly.t, habitat.channel_across(fly.across)
+		move_toward(self, ctx.river, ctx.dt, self.cruise * 1.25)
+		return bt.RUNNING
+	end
+	local u = hash01(self.id, (self.takes or 0) + 1, self.seed)
+	self.takes = (self.takes or 0) + 1
+	local kind
+	if fly.state == "skitter" then
+		kind = u < 0.55 and "gulp" or (u < 0.80 and "jump" or "miss")
+	else
+		kind = u < 0.15 and "gulp" or (u < 0.70 and "jump" or "miss")
+	end
+	local name = kind == "jump" and "splash" or (kind == "gulp" and "sip" or "rise")
+	local spec = MANNERS[name]
+	self.surface = { t = 0, duration = spec.duration, height = spec.height, ring = spec.ring, name = name }
+	self.take_clip, self.take_kind, self.hunting = true, kind, true
+	self.activity = kind == "jump" and "burst" or "rise"
+	breach_fx(ctx.river, self, spec)
+	ctx.events[#ctx.events + 1] = { x = fly.x, y = fly.y, kind = kind }
 	return bt.RUNNING
 end
 
@@ -199,11 +291,12 @@ local function act_feed(ctx)
 	return bt.SUCCESS
 end
 
--- Flee, else bully, else rise, else seek, else feed.
+-- Flee, else bully, else take, else rise, else seek, else feed.
 local function tree()
 	return bt.selector({
 		bt.action(act_flee),
 		bt.action(act_bully),
+		bt.action(act_take),
 		bt.action(act_rise),
 		bt.action(act_seek),
 		bt.action(act_feed),
@@ -286,12 +379,16 @@ local function dimple(self, river, dt)
 end
 
 -- Tick every fish tree, then move each one through the water column.
-function fish.update(list, dt, river, player)
+-- env carries birds and insects for threat and hunt checks. Take
+-- events come back so the main loop can answer the flies.
+function fish.update(list, dt, river, player, env)
+	env = env or {}
+	local events = {}
 	for i = 1, #list do
 		local self = list[i]
 		self.clock = self.clock + dt
 		self.phase = mind.phase(self)
-		bt.tick(self.tree, { fish = self, river = river, dt = dt, player = player, list = list })
+		bt.tick(self.tree, { fish = self, river = river, dt = dt, player = player, list = list, birds = env.birds, insects = env.insects, events = events })
 		mind.approach_column(self, mind.column_target(self, self.phase), dt)
 		dimple(self, river, dt)
 		local ot, oa = self.t, self.across
@@ -304,6 +401,7 @@ function fish.update(list, dt, river, player)
 			self.home_t, self.home_across = self.t, self.across
 		end
 	end
+	return events
 end
 
 -- One body segment. Lateral offset bends the spine. Head stays

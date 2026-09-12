@@ -4,14 +4,18 @@ local draw = require "draw"
 local debug_ui = require "ui.debug"
 local flybox_ui = require "ui.flybox"
 local fish = require "entity.fish"
+local birds = require "entity.birds"
+local insects = require "entity.insects"
 local load_screen = require "ui.splash"
 local sfx = require "sfx"
 
 local world, dbg, boot, flybox
 
--- Spawn the seeded school for the current river.
+-- Spawn the seeded school, birds, and flies for the current river.
 local function spawn_entities()
 	world.fish = fish.spawn(world.river, world.seed)
+	world.birds = birds.spawn(world.river, world.seed)
+	world.insects = insects.spawn(world.river, world.seed)
 end
 
 -- Apply a new seed to the river and entities.
@@ -125,7 +129,12 @@ function love.update(dt)
 	if dt > 0.05 then dt = 0.05 end
 	dt = dt * world.time_scale
 	world.river:update(dt)
-	fish.update(world.fish, dt, world.river, nil)
+	birds.update(world.birds, dt, world.river)
+	insects.update(world.insects, dt, world.river)
+	local events = fish.update(world.fish, dt, world.river, nil, { birds = world.birds, insects = world.insects })
+	if events and #events > 0 then
+		insects.apply_events(world.insects, events, world.river)
+	end
 	-- Water bed follows the beat. Flow norm plus turbulence
 	-- steer the three voices.
 	local u = math.max(0, math.min(1, (world.river.flow.base_speed - 0.45) / 1.1))
@@ -140,6 +149,8 @@ function love.draw()
 	end
 	world.river:draw()
 	fish.draw(world.fish, world.river)
+	insects.draw(world.insects)
+	birds.draw(world.birds)
 	if world.show_fish then
 		fish.draw_indicators(world.fish)
 	end

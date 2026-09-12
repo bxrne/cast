@@ -56,6 +56,30 @@ function mind.spooked(fish, player, river)
 	return dist < radius
 end
 
+-- Nearest threatening bird, or nil. Flying birds and fresh
+-- landings count. Perched birds are scenery. Radius scales
+-- with the bird size and the water clarity.
+function mind.bird_threat(fish, birds, river)
+	if not birds or not fish.x then
+		return nil
+	end
+	local clar = mind.clarity(river)
+	local bd, hit = 1e9, nil
+	for i = 1, #birds do
+		local b = birds[i]
+		if b.x and (b.state == "flying" or b.state == "takeoff" or (b.grace or 0) > 0) then
+			local dx, dy = fish.x - b.x, fish.y - b.y
+			local d = math.sqrt(dx * dx + dy * dy)
+			local base = (b.type and b.type.spook_r) or 120
+			local radius = base * (b.state == "flying" and 1.25 or 1.0) * (0.5 + 0.5 * clar)
+			if d < radius and d < bd then
+				bd, hit = d, b
+			end
+		end
+	end
+	return hit
+end
+
 -- Nearest rival this fish will try to push off a lie.
 function mind.rival(fish, list)
 	local best, found = 1e9, nil
