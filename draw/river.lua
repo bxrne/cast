@@ -10,9 +10,12 @@ river.__index = river
 
 local SAMPLES, STREAKS, TILE, BANK_TILE = 96, 3, 256, 128
 local ALONG, WET_LIP, WATER_INSET = 8, 8, 2.5
-local lerp, clamp, mix3, hash2 = mathx.lerp, mathx.clamp, mathx.mix3, mathx.hash2
+local lerp, clamp, mix3, mix3r, hash2 = mathx.lerp, mathx.clamp, mathx.mix3, mathx.mix3r, mathx.hash2
 local tile_noise, tangent, TAU = mathx.tile_noise, mathx.tangent, mathx.TAU
 local vert, strip = gfx.vert, gfx.strip
+
+-- Reused scratch for river:sample. No alloc in hot draw paths.
+local RIVER_SCRATCH = {}
 
 -- Soft low contrast grain. Reads as soil, not tile.
 local function grain_tile(seed)
@@ -323,9 +326,10 @@ function river:update(dt)
 end
 
 -- Sample flow at parametric (t, across). Geometry only, used by
--- habitat scoring and the shore pose.
+-- habitat scoring and the shore pose. Reuses scratch; caller
+-- must not hold the table across frames.
 function river:sample(t, across)
-	return flow.sample(self.flow, t, across)
+	return flow.sample_into(self.flow, t, across, nil, RIVER_SCRATCH)
 end
 
 -- Reuse scratch. No alloc in fish hot loops.
@@ -414,8 +418,8 @@ function river:draw_flow()
 			local slow = { 0.18, 0.36, 0.75 }
 			local fleet = { 0.28, 0.86, 0.82 }
 			local hot = { 0.95, 0.55, 0.25 }
-			local c = mix3(mix3(slow, fleet, fast), hot, eddy * 0.75)
-			love.graphics.setColor(c[1], c[2], c[3], 0.82)
+			local c_r, c_g, c_b = mix3r(mix3r(slow, fleet, fast), hot, eddy * 0.75)
+			love.graphics.setColor(c_r, c_g, c_b, 0.82)
 			local tip = 8 + s.speed * 30 + (0.4 + eddy * 0.6) * nse * 5
 			local cth, sn = math.cos(nse), math.sin(nse)
 			local ex, ey = s.tx * cth - s.ty * sn, s.tx * sn + s.ty * cth

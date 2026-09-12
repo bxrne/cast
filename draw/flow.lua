@@ -172,17 +172,20 @@ local function pair(field, t)
 	return s[i], s[i + 1], f - i
 end
 
--- Blend two stations for depth lookups.
+-- Scratch for blend_station. Avoids per-sample table allocation.
+local BLEND_SCRATCH = {}
+
+-- Blend two stations for depth lookups. Returns scratch table.
 local function blend_station(a, b, u)
-	return {
-		kappa = lerp(a.kappa, b.kappa, u),
-		width_scale = lerp(a.width_scale, b.width_scale, u),
-		thalweg = lerp(a.thalweg, b.thalweg, u),
-		pool = lerp(a.pool, b.pool, u),
-		bed_scale = lerp(a.bed_scale, b.bed_scale, u),
-		hw = lerp(a.hw, b.hw, u),
-		dhw = lerp(a.dhw, b.dhw, u),
-	}
+	local s = BLEND_SCRATCH
+	s.kappa = lerp(a.kappa, b.kappa, u)
+	s.width_scale = lerp(a.width_scale, b.width_scale, u)
+	s.thalweg = lerp(a.thalweg, b.thalweg, u)
+	s.pool = lerp(a.pool, b.pool, u)
+	s.bed_scale = lerp(a.bed_scale, b.bed_scale, u)
+	s.hw = lerp(a.hw, b.hw, u)
+	s.dhw = lerp(a.dhw, b.dhw, u)
+	return s
 end
 
 -- Speed at a station using the field's base current. Geometry only.

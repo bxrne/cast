@@ -20,9 +20,14 @@ function mathx.clamp(x, lo, hi)
 	return x
 end
 
--- Lerp two rgb triples.
+-- Lerp two rgb triples. Allocates a table.
 function mathx.mix3(a, b, t)
 	return { mathx.lerp(a[1], b[1], t), mathx.lerp(a[2], b[2], t), mathx.lerp(a[3], b[3], t) }
+end
+
+-- Lerp two rgb triples, return three numbers. No allocation.
+function mathx.mix3r(a, b, t)
+	return mathx.lerp(a[1], b[1], t), mathx.lerp(a[2], b[2], t), mathx.lerp(a[3], b[3], t)
 end
 
 -- Fractional part of x.

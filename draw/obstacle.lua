@@ -2,7 +2,7 @@ local mathx = require "lib.math"
 local palette = require "draw.palette"
 
 local obstacle = {}
-local clamp, mix3, TAU = mathx.clamp, mathx.mix3, mathx.TAU
+local clamp, mix3, mix3r, TAU = mathx.clamp, mathx.mix3, mathx.mix3r, mathx.TAU
 local LICHEN_PALE = { 0.62, 0.64, 0.50 }
 local LICHEN_RUST = { 0.72, 0.50, 0.30 }
 
@@ -117,15 +117,15 @@ end
 local function draw_rock(o, s, char, emergent)
 	local deep = char.water_deep
 	if not emergent then
-		local c = mix3(mix3(palette.STONE, char.gravel, 0.5), deep, 0.55)
-		love.graphics.setColor(c[1], c[2], c[3], 0.85)
+		local r, g, b = mix3r(mix3r(palette.STONE, char.gravel, 0.5), deep, 0.55)
+		love.graphics.setColor(r, g, b, 0.85)
 		love.graphics.polygon("fill", o.poly)
 		return
 	end
-	local stone = mix3(palette.STONE, char.gravel, 0.35 + o.tone * 0.35)
+	local sr, sg, sb = mix3r(palette.STONE, char.gravel, 0.35 + o.tone * 0.35)
 	love.graphics.setColor(deep[1], deep[2], deep[3], 0.35)
 	love.graphics.polygon("fill", o.poly_wet)
-	love.graphics.setColor(stone[1], stone[2], stone[3], 1)
+	love.graphics.setColor(sr, sg, sb, 1)
 	love.graphics.polygon("fill", o.poly)
 	love.graphics.setColor(deep[1], deep[2], deep[3], 0.30)
 	love.graphics.polygon("fill", o.poly_lo)
@@ -142,8 +142,8 @@ local function draw_rock(o, s, char, emergent)
 	end
 	local moss_a = o.moss * 0.7
 	if moss_a > 0.05 then
-		local moss = mix3(palette.MOSS, char.bank, 0.35)
-		love.graphics.setColor(moss[1], moss[2], moss[3], moss_a)
+		local mr, mg, mb = mix3r(palette.MOSS, char.bank, 0.35)
+		love.graphics.setColor(mr, mg, mb, moss_a)
 		for i = 1, #o.moss_poly do
 			love.graphics.polygon("fill", o.moss_poly[i])
 		end

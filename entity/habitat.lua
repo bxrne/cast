@@ -85,18 +85,20 @@ end
 
 -- Sample the channel on a regular (t, across) grid. Cached per
 -- river build, keyed weak so dead rivers drop their grids.
+-- Uses flow.sample (allocates) since cells are stored long-term.
 local grid_cache = setmetatable({}, { __mode = "k" })
 function habitat.grid(river)
 	local hit = grid_cache[river]
 	if hit and hit.id == river.cache_id then
 		return hit.cells
 	end
+	local flow_mod = require("draw.flow")
 	local cells = {}
 	for i = 1, GRID_T do
 		local t = 0.07 + (i - 0.5) / GRID_T * 0.86
 		for j = 1, GRID_A do
 			local across = ACROSS_LO + (j - 1) / (GRID_A - 1) * (ACROSS_HI - ACROSS_LO)
-			local s = river:sample(t, across)
+			local s = flow_mod.sample(river.flow, t, across)
 			s.occ = river:rock_at(t, across)
 			cells[#cells + 1] = s
 		end
