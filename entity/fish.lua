@@ -16,6 +16,7 @@ local MANNERS = {
 
 -- Reused scratch for pose lookups. No alloc in the hot loop.
 local SCRATCH = {}
+local CENTER = { 0, 0 }
 local ORDER = {}
 local BELLY_CREAM = { 0.82, 0.80, 0.66 }
 
@@ -485,12 +486,13 @@ function fish.draw(list, river)
 			love.graphics.ellipse("line", self.x, self.y, self.surface.ring * (0.4 + 0.6 * u), self.surface.ring * 0.35 * (0.4 + 0.6 * u))
 		end
 		sh:send("dorsal", self.species.color)
-		sh:send("belly", mix3(self.species.color, BELLY_CREAM, 0.7))
+		sh:send("belly", self.species.belly or mix3(self.species.color, BELLY_CREAM, 0.7))
 		sh:send("stripe", self.species.stripe)
 		sh:send("deep", deep)
 		sh:send("sink", sink)
 		sh:send("flash", flash)
-		sh:send("center", { self.x, self.y + lift })
+		CENTER[1], CENTER[2] = self.x, self.y + lift
+		sh:send("center", CENTER)
 		sh:send("angle", ang)
 		sh:send("half_h", len * 0.10)
 		love.graphics.setShader(sh)

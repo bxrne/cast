@@ -32,25 +32,43 @@ local function ctrl(id, kind, get, set, extra)
 	return extra
 end
 
--- Build the debug panel for the current world. Flat list.
--- Seed and fps always visible. All knobs reachable.
+-- Section title. Never selectable, never adjustable.
+local function head(id)
+	return ctrl(id, "header", function() return "" end, function() end)
+end
+
+-- Live fly takes across the school this frame.
+local function take_count()
+	local n = 0
+	for i = 1, #world.fish do
+		n = n + (world.fish[i].takes or 0)
+	end
+	return string.format("%d takes", n)
+end
+
+-- Flies still on the water out of the hatch total.
+local function flies_up()
+	local up, n = 0, #world.insects
+	for i = 1, n do
+		if world.insects[i].state ~= "taken" then
+			up = up + 1
+		end
+	end
+	return string.format("%d/%d up", up, n)
+end
+
+-- Build the debug panel for the current world. Headers split
+-- the list into sections. Labels are readouts: the cursor
+-- skips them, so fps and counts can never read as knobs.
 local function build_panel()
 	world.sound = world.sound or 0.20
+	world.show_birds = world.show_birds ~= false
+	world.show_insects = world.show_insects ~= false
 	dbg = debug_ui.new({
 		controls = {
+			head("river"),
 			ctrl("seed", "seed", function() return world.seed end, reseed,
 				{ min = 1, max = 24, bed = function() return world.river.char.bed_type.id end }),
-			ctrl("fps", "label", function()
-				return string.format("%d fps", love.timer.getFPS())
-			end, function() end),
-			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
-			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
-			ctrl("sfx", "bool", function() return sfx.is_enabled() end, function(v) sfx.onoff(v) end),
-			ctrl("sound", "float",
-				function() return world.sound end,
-				function(v) world.sound = v sfx.level(v) end,
-				{ min = 0, max = 1, step = 0.05 }),
-			ctrl("fish tags", "bool", function() return world.show_fish end, function(v) world.show_fish = v end),
 			ctrl("current", "float",
 				function() return world.river.flow.base_speed / world.river.flow.base end,
 				function(v) world.river.flow.base_speed = world.river.flow.base * v world.river:touch_flow() end,
@@ -67,7 +85,27 @@ local function build_panel()
 				function() return world.river.water_sheen end,
 				function(v) world.river.water_sheen = v end,
 				{ min = 0, max = 1, step = 0.05 }),
+			head("life"),
+			ctrl("fishes", "label", function() return string.format("%d fish", #world.fish) end, function() end),
+			ctrl("birds", "bool", function() return world.show_birds end, function(v) world.show_birds = v end),
+			ctrl("flies", "bool", function() return world.show_insects end, function(v) world.show_insects = v end),
+			ctrl("takes", "label", take_count, function() end),
+			ctrl("hatch", "label", flies_up, function() end),
+			head("sim"),
+			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
+			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
+			head("sound"),
+			ctrl("sfx", "bool", function() return sfx.is_enabled() end, function(v) sfx.onoff(v) end),
+			ctrl("sound", "float",
+				function() return world.sound end,
+				function(v) world.sound = v sfx.level(v) end,
+				{ min = 0, max = 1, step = 0.05 }),
+			head("view"),
+			ctrl("fish tags", "bool", function() return world.show_fish end, function(v) world.show_fish = v end),
 			ctrl("show flow", "bool", function() return world.river.show_flow end, function(v) world.river.show_flow = v end),
+			ctrl("fps", "label", function()
+				return string.format("%d fps", love.timer.getFPS())
+			end, function() end),
 		},
 	})
 	sfx.level(world.sound)
@@ -129,10 +167,25 @@ function love.update(dt)
 	if dt > 0.05 then dt = 0.05 end
 	dt = dt * world.time_scale
 	world.river:update(dt)
-	birds.update(world.birds, dt, world.river)
-	insects.update(world.insects, dt, world.river)
-	local events = fish.update(world.fish, dt, world.river, nil, { birds = world.birds, insects = world.insects })
-	if events and #events > 0 then
+	-- Hidden life stays out of the sim, not just the draw.
+	-- Birds off means no spooks and no pecks. Flies off
+	-- means nothing to hunt and nothing to scatter.
+	local show_birds = world.show_birds ~= false
+	local show_flies = world.show_insects ~= false
+	if show_birds then
+		birds.update(world.birds, dt, world.river)
+	end
+	if show_flies then
+		if show_birds then
+			insects.avoid_birds(world.insects, world.birds, world.river, dt)
+		end
+		insects.update(world.insects, dt, world.river)
+	end
+	local events = fish.update(world.fish, dt, world.river, nil, {
+		birds = show_birds and world.birds or nil,
+		insects = show_flies and world.insects or nil,
+	})
+	if show_flies and events and #events > 0 then
 		insects.apply_events(world.insects, events, world.river)
 	end
 	-- Water bed follows the beat. Flow norm plus turbulence
@@ -149,8 +202,12 @@ function love.draw()
 	end
 	world.river:draw()
 	fish.draw(world.fish, world.river)
-	insects.draw(world.insects)
-	birds.draw(world.birds)
+	if world.show_insects ~= false then
+		insects.draw(world.insects)
+	end
+	if world.show_birds ~= false then
+		birds.draw(world.birds)
+	end
 	if world.show_fish then
 		fish.draw_indicators(world.fish)
 	end

@@ -204,11 +204,18 @@ local function rails(pts, char, field)
 end
 
 -- Short current streaks that stay inside the water strip.
+-- Point buffers are reused. The old code built fresh tables
+-- per streak per frame.
+local STREAK_BUF = { {}, {}, {} }
 local function draw_streaks(channel, time, speed)
 	local left, right = channel.water_l, channel.water_r
 	love.graphics.setLineWidth(1)
 	for s = 1, STREAKS do
-		local across, phase, pts = s / (STREAKS + 1), (time * speed * 0.10 + s * 0.23) % 1, {}
+		local across, phase = s / (STREAKS + 1), (time * speed * 0.10 + s * 0.23) % 1
+		local pts = STREAK_BUF[s]
+		for i = #pts, 1, -1 do
+			pts[i] = nil
+		end
 		love.graphics.setColor(0.72, 0.78, 0.72, 0.06 + (s % 2) * 0.03)
 		for i = 1, #left do
 			local along = (left[i].u / ALONG + phase * (0.7 + 0.3 * ((left[i].speed or speed) / math.max(speed, 0.1)))) %
@@ -218,10 +225,15 @@ local function draw_streaks(channel, time, speed)
 				pts[#pts + 1] = lerp(left[i].y, right[i].y, across)
 			else
 				gfx.line(pts)
-				pts = {}
+				for j = #pts, 1, -1 do
+					pts[j] = nil
+				end
 			end
 		end
 		gfx.line(pts)
+		for j = #pts, 1, -1 do
+			pts[j] = nil
+		end
 	end
 end
 

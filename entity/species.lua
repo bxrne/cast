@@ -35,6 +35,8 @@ local BED_FIT = {
 local SIZE_IDEAL = { brown = 0.6, rainbow = 0.5, brook = 0.2, cutthroat = 0.4, bull = 0.8 }
 
 local clamp = mathx.clamp
+local mix3 = mathx.mix3
+local BELLY_CREAM = { 0.82, 0.80, 0.66 }
 
 -- Weight each taxon for this water. Form: w = 0.15 + bed
 -- * (0.35 + 0.65 * (flow + size) / 2). Bed sets the base,
@@ -86,6 +88,9 @@ function species.instantiate(spec, char, clarity)
 	out.surface_period = spec.surface_period * (1 + 0.8 * stress)
 	out.aggression = clamp(spec.aggression * (1 - 0.3 * stress), 0, 1)
 	out.rise_depth = clamp(spec.rise_depth * (1 - 0.2 * stress), 0.2, 0.9)
+	-- Belly tint baked once. The draw loop used to mix this
+	-- per fish per frame.
+	out.belly = mix3(out.color, BELLY_CREAM, 0.7)
 	return out
 end
 

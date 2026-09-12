@@ -8,15 +8,16 @@ local mathx = require "lib.math"
 local birds = {}
 local clamp, hash01, lerp, TAU = mathx.clamp, mathx.hash01, mathx.lerp, mathx.TAU
 
--- Four visitors. spook_r is the screen radius that scurries
--- fish. flow_pref 0 still water, 1 fast water. chest is a
--- bright bib that reads against grey rock. bob is the idle
--- dip amplitude so perched birds move.
+-- Two visitors, both big waders. The roster stays small on
+-- purpose: a grey heron and a white egret read against any
+-- bed without relying on the seed. spook_r is the screen
+-- radius that scurries fish. flow_pref 0 still water,
+-- 1 fast water. chest is a bright bib that reads against
+-- grey rock. bob is the idle dip amplitude so perched
+-- birds move.
 birds.TYPES = {
-	{ id = "heron", size = 22, body = { 0.52, 0.57, 0.62 }, wing = { 0.35, 0.40, 0.46 }, chest = { 0.84, 0.84, 0.80 }, beak = { 0.85, 0.70, 0.30 }, bob = 0.6, spook_r = 170, cruise = 130, alt = 90, beds = { silt = 1.0, peat = 0.9, gravel = 0.5, chalk = 0.5, bedrock = 0.3 }, flow_pref = 0.2, size_pref = 0.7 },
-	{ id = "dipper", size = 11, body = { 0.28, 0.24, 0.20 }, wing = { 0.34, 0.30, 0.25 }, chest = { 0.93, 0.91, 0.85 }, beak = { 0.70, 0.65, 0.55 }, bob = 2.2, spook_r = 95, cruise = 170, alt = 55, beds = { bedrock = 1.0, gravel = 0.9, chalk = 0.5, silt = 0.3, peat = 0.3 }, flow_pref = 0.8, size_pref = 0.35 },
-	{ id = "wagtail", size = 12, body = { 0.62, 0.62, 0.56 }, wing = { 0.30, 0.30, 0.26 }, chest = { 0.90, 0.86, 0.62 }, beak = { 0.20, 0.18, 0.16 }, bob = 1.2, spook_r = 105, cruise = 160, alt = 65, beds = { gravel = 1.0, chalk = 0.9, silt = 0.5, peat = 0.4, bedrock = 0.5 }, flow_pref = 0.5, size_pref = 0.45 },
-	{ id = "kingfisher", size = 12, body = { 0.16, 0.50, 0.66 }, wing = { 0.12, 0.35, 0.48 }, chest = { 0.87, 0.47, 0.20 }, beak = { 0.15, 0.14, 0.12 }, bob = 0.8, spook_r = 120, cruise = 220, alt = 50, beds = { peat = 0.9, silt = 0.8, gravel = 0.6, chalk = 0.5, bedrock = 0.3 }, flow_pref = 0.35, size_pref = 0.4 },
+	{ id = "heron", size = 24, body = { 0.42, 0.46, 0.52 }, wing = { 0.30, 0.33, 0.38 }, chest = { 0.88, 0.88, 0.84 }, beak = { 0.90, 0.74, 0.28 }, bob = 0.6, spook_r = 170, cruise = 130, alt = 90, beds = { silt = 1.0, peat = 0.9, gravel = 0.7, chalk = 0.6, bedrock = 0.4 }, flow_pref = 0.25, size_pref = 0.7 },
+	{ id = "egret", size = 20, body = { 0.93, 0.93, 0.89 }, wing = { 0.85, 0.85, 0.81 }, chest = { 0.97, 0.97, 0.93 }, beak = { 0.92, 0.72, 0.22 }, bob = 0.9, spook_r = 140, cruise = 145, alt = 80, beds = { chalk = 1.0, gravel = 0.9, silt = 0.8, peat = 0.6, bedrock = 0.4 }, flow_pref = 0.4, size_pref = 0.6 },
 }
 
 -- Weight one type for this water. Form mirrors species
@@ -52,14 +53,21 @@ local function perch_dur(seed, id, n)
 	return 12 + hash01(seed, id, n) * 12
 end
 
--- Emergent rock candidates. Falls back to the largest rock,
--- then to a bank point when the beat has no stones.
-local function perch_rocks(river)
+-- Emergent rock survey, cached per river build. Rocks never
+-- move, so sampling them every frame is pure waste. Keyed
+-- weak like the habitat grid so dead rivers drop out.
+local survey_cache = setmetatable({}, { __mode = "k" })
+local function survey(river)
+	local hit = survey_cache[river]
+	if hit and hit.id == river.cache_id then
+		return hit.cands, hit.xy
+	end
 	local list = river.obstacles or {}
-	local cands = {}
+	local cands, xy = {}, {}
 	for i = 1, #list do
 		local o = list[i]
 		local s = river:sample(o.t, o.across)
+		xy[i] = { x = s.x, y = s.y }
 		if s.depth < o.r * 0.85 then
 			cands[#cands + 1] = i
 		end
@@ -73,6 +81,14 @@ local function perch_rocks(river)
 		end
 		cands[1] = bi
 	end
+	survey_cache[river] = { id = river.cache_id, cands = cands, xy = xy }
+	return cands, xy
+end
+
+-- Emergent rock candidates. Falls back to the largest rock.
+-- Bank points cover beats with no stones at all.
+local function perch_rocks(river)
+	local cands = survey(river)
 	return cands
 end
 
@@ -117,6 +133,7 @@ function birds.spawn(river, seed)
 			fx = s.x, fy = s.y, x = s.x, y = s.y,
 			tx = s.x, ty = s.y, alt = 0, prog = 0, dur = 1,
 			flap = hash01(seed, i, 506) * TAU,
+			peck_t = 3 + hash01(seed, i, 512) * 5,
 			grace = 0, clock = hash01(seed, i, 507) * 10,
 		}
 	end
@@ -151,8 +168,9 @@ function birds.threatening(b)
 end
 
 -- Tick clocks, hops, and flights. Landing rings the film.
+-- Perched poses read the cached survey. No sampling here.
 function birds.update(list, dt, river)
-	local cands = perch_rocks(river)
+	local cands, xy = survey(river)
 	for bi = 1, #list do
 		local b = list[bi]
 		b.clock = b.clock + dt
@@ -160,19 +178,27 @@ function birds.update(list, dt, river)
 		if b.state == "perched" then
 			b.flap = b.flap + dt * 2
 			b.timer = b.timer - dt
-			local s = river:sample(b.t, b.across)
-			b.x, b.y = s.x, s.y - (river.obstacles and b.rock > 0 and 6 or 0)
+			local p = xy[b.rock]
+			if p then
+				b.x, b.y = p.x, p.y - 6
+			else
+				local s = river:sample(b.t, b.across)
+				b.x, b.y = s.x, s.y
+			end
 			b.alt = 0
 			if b.timer <= 0 then
 				b.trips = b.trips + 1
+				b.from_t, b.from_a = b.t, b.across
 				local rock = next_rock(b, river, cands)
 				b.rock = rock
 				if rock > 0 then
 					local o = river.obstacles[rock]
 					b.to_t, b.to_a = o.t, o.across
+					b.tx, b.ty = xy[rock].x, xy[rock].y
+				else
+					local s2 = river:sample(b.to_t, b.to_a)
+					b.tx, b.ty = s2.x, s2.y
 				end
-				local s2 = river:sample(b.to_t, b.to_a)
-				b.tx, b.ty = s2.x, s2.y
 				b.state = "takeoff"
 				b.prog = 0
 				b.dur = 0.45

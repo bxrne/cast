@@ -128,6 +128,52 @@ function insects.startle_at(list, x, y, r)
 	end
 end
 
+-- Answer birds. Flying birds scatter the flies under their
+-- shadow, harder when low. Perched birds peck the nearest
+-- catchable fly inside 48 px on a seeded timer. Reads birds,
+-- writes only flies.
+function insects.avoid_birds(list, birds, river, dt)
+	if not birds then
+		return
+	end
+	for bi = 1, #birds do
+		local b = birds[bi]
+		if b.state == "flying" or b.state == "takeoff" then
+			local span = (b.type and b.type.alt or 60) + 40
+			local r = 90 * (1 - (b.alt or 0) / span) + 30
+			if r >= 25 then
+				insects.startle_at(list, b.x, b.y, r)
+			end
+		elseif b.state == "perched" then
+			b.peck_t = (b.peck_t or 5) - dt
+			if b.peck_t <= 0 then
+				local best, bd = nil, 48
+				for i = 1, #list do
+					local f = list[i]
+					if (f.state == "swarm" or f.state == "skitter") and f.x then
+						local dx, dy = f.x - b.x, f.y - b.y
+						local d = math.sqrt(dx * dx + dy * dy)
+						if d < bd then
+							bd, best = d, f
+						end
+					end
+				end
+				if best then
+					best.state = "taken"
+					best.timer = 6 + hash01(best.seed, best.id, math.floor(insects._clock or 0) + 316) * 5
+					if river.splash then
+						river.splash:dimple(best.x, best.y, 2.5)
+					end
+					insects.startle_at(list, best.x, best.y, 30)
+					b.peck_t = 4 + hash01(b.seed, b.id, b.trips + 513) * 5
+				else
+					b.peck_t = 2
+				end
+			end
+		end
+	end
+end
+
 -- Apply fish take events from the frame. Each event is
 -- { x, y, kind } with kind gulp, jump, or miss. A gulp
 -- eats the nearest catchable fly. Jump and miss only scatter.
