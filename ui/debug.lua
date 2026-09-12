@@ -4,6 +4,7 @@ local debug = {}
 debug.__index = debug
 
 local PANEL_W, ROW_H, PAD = 280, 22, 12
+local FOOTER_GAP, FOOTER_H = 14, 20
 local SEL = { 0.95, 0.88, 0.60 }
 
 -- UI theme, shared with flybox and fish tags.
@@ -117,7 +118,7 @@ function debug:draw()
 	local controls = self.controls
 	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
 	local x, y = w - PANEL_W - 16, 16
-	local panel_h = PAD * 2 + (#controls + 2) * ROW_H
+	local panel_h = PAD * 2 + (#controls + 1) * ROW_H + FOOTER_GAP + FOOTER_H
 	love.graphics.push("all")
 	love.graphics.setFont(self.font)
 	love.graphics.origin()
@@ -141,8 +142,11 @@ function debug:draw()
 		love.graphics.print(c.label or c.id or "?", x + PAD, cy)
 		love.graphics.printf(format_value(c), x + PAD, cy, PANEL_W - PAD * 2, "right")
 	end
+	local footer_y = y + panel_h - PAD - FOOTER_H
+	love.graphics.setColor(debug.EDGE[1], debug.EDGE[2], debug.EDGE[3], 0.45)
+	love.graphics.line(x + PAD, footer_y - FOOTER_GAP / 2, x + PANEL_W - PAD, footer_y - FOOTER_GAP / 2)
 	love.graphics.setColor(debug.DIM[1], debug.DIM[2], debug.DIM[3])
-	love.graphics.print("arrows adjust   F1 close", x + PAD, y + panel_h - PAD - ROW_H)
+	love.graphics.print("arrows adjust   F1 close", x + PAD, footer_y + 4)
 	love.graphics.pop()
 end
 

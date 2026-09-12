@@ -31,7 +31,7 @@ end
 -- Build the debug panel for the current world. Flat list.
 -- Seed and fps always visible. All knobs reachable.
 local function build_panel()
-	world.sound = world.sound or 0.64
+	world.sound = world.sound or 0.20
 	dbg = debug_ui.new({
 		controls = {
 			ctrl("seed", "seed", function() return world.seed end, reseed,
@@ -90,7 +90,7 @@ local function boot_step()
 		-- Step3: river needs the shader from step1.
 		world = { seed = love.math.random(1, 24), paused = false, time_scale = 1, show_fish = false }
 		world.river = draw.river.new({ seed = world.seed, shader = boot.water })
-		world.sound = 0.64
+		world.sound = 0.20
 	elseif n == 4 then
 		-- Steps4+5+6: entities, panel, sound are independent after river.
 		spawn_entities()
@@ -185,6 +185,9 @@ function love.resize(w, h)
 	end
 	world.river:resize(w, h)
 	spawn_entities()
+	if flybox then
+		flybox:resize()
+	end
 end
 
 -- Route clicks to the fly box first.
