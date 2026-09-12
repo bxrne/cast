@@ -418,7 +418,7 @@ function fish.draw(list, river)
 	end
 end
 
--- Feed-phase tint used in the tag underline.
+-- Feed-phase tint used in the tag meter.
 local PHASE_TINT = {
 	rest = { 0.62, 0.66, 0.56 },
 	nymph = { 0.42, 0.64, 0.74 },
@@ -426,43 +426,46 @@ local PHASE_TINT = {
 	film = { 0.94, 0.80, 0.50 },
 }
 
--- Column-depth meter: a thin bar with a marker at the fish height.
-local function depth_meter(x, y, column)
-	love.graphics.setColor(0.86, 0.92, 0.86, 0.30)
-	love.graphics.setLineWidth(1)
-	love.graphics.line(x, y - 1, x, y + 13)
-	love.graphics.setColor(0.86, 0.92, 0.86, 0.85)
-	local my = y + 12 - 12 * column
-	love.graphics.circle("fill", x, my, 2.2, 8)
-end
+local tag_font = nil
+local dbg_theme -- lazy-loaded to avoid circular require
 
--- Tags for each trout: species dot, phase tint, and column height.
+-- Tags for each trout. One slim pill: species dot, name and
+-- phase in cream, column as a tinted mini meter on the right.
 -- Label text caches at 5 Hz to avoid per frame format churn.
 function fish.draw_indicators(list)
+	if not tag_font then
+		dbg_theme = require("ui.debug")
+		tag_font = love.graphics.newFont(12)
+	end
 	love.graphics.push("all")
+	love.graphics.setFont(tag_font)
+	local BG = dbg_theme.BG
+	local EDGE = dbg_theme.EDGE
 	for i = 1, #list do
 		local self = list[i]
 		if not self._tag_t or self.clock - self._tag_t > 0.2 then
-			self._tag = string.format("%-7s %s %3.0f%%", self.species.id, self.phase, self.column * 100)
+			self._tag = string.format("%s %s %d%%", self.species.id, self.phase, self.column * 100)
 			self._tag_t = self.clock
 		end
-		local label = self._tag
-		local tw = love.graphics.getFont():getWidth(label)
-		local w, h = tw + 30, 16
-		local x, y = math.floor(self.x + 9), math.floor(self.y - 12)
-		love.graphics.setColor(0.06, 0.07, 0.05, 0.72)
-		love.graphics.rectangle("fill", x, y, w, h, 4, 4)
-		love.graphics.setColor(1, 1, 1, 0.12)
-		love.graphics.rectangle("line", x, y, w, h, 4, 4)
+		local tw = tag_font:getWidth(self._tag)
+		local w, h = tw + 34, 20
+		local x, y = math.floor(self.x + 10), math.floor(self.y - 30)
+		love.graphics.setColor(BG[1], BG[2], BG[3], 0.62)
+		love.graphics.rectangle("fill", x, y, w, h, 8, 8)
+		love.graphics.setColor(EDGE[1], EDGE[2], EDGE[3], 0.55)
+		love.graphics.setLineWidth(1)
+		love.graphics.rectangle("line", x, y, w, h, 8, 8)
 		local c = self.species.color
 		love.graphics.setColor(c[1], c[2], c[3], 0.95)
-		love.graphics.circle("fill", x + 9, y + 8, 3.4, 8)
+		love.graphics.circle("fill", x + 10, y + 10, 3.2, 10)
+		love.graphics.setColor(0.88, 0.86, 0.70, 0.95)
+		love.graphics.print(self._tag, x + 17, y + 3)
 		local tint = PHASE_TINT[self.phase] or { 0.8, 0.8, 0.7 }
-		love.graphics.setColor(tint[1], tint[2], tint[3], 0.9)
-		love.graphics.rectangle("fill", x + 15, y + h - 2, w - 30, 2, 1, 1)
-		love.graphics.setColor(0.90, 0.88, 0.72, 0.97)
-		love.graphics.print(label, x + 17, y + 2)
-		depth_meter(x + w - 4, y + 2, self.column)
+		local mh = 12 * self.column
+		love.graphics.setColor(tint[1], tint[2], tint[3], 0.35)
+		love.graphics.rectangle("fill", x + w - 8, y + 4, 3, 12, 1, 1)
+		love.graphics.setColor(tint[1], tint[2], tint[3], 0.95)
+		love.graphics.rectangle("fill", x + w - 8, y + 4 + 12 - mh, 3, mh, 1, 1)
 	end
 	love.graphics.pop()
 end
