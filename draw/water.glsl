@@ -49,9 +49,18 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 screen) {
 
 	// Body of water: palette-driven, deep water falling toward the deep
 	// colour and slightly lighter on the shallow shelves. Never grey.
-	float dcol = clamp(depth * 0.78, 0.0, 1.0);
+	// Depth contours: the falloff runs through soft bands, not a
+	// straight ramp, so pools and slots read as shapes. Band edges
+	// wobble on noise so they follow the water, never ruled lines.
+	// The vertex tint carries weight so the channel gradient
+	// survives the mix.
+	float bands = 4.0;
+	float wob = fbm(vec2(along * 5.0, across * 2.5) + 7.1) - 0.5;
+	float bd = clamp(depth * 0.92 + wob * 0.3, 0.0, 1.0) * bands;
+	float bw = smoothstep(0.25, 0.75, fract(bd));
+	float dcol = (floor(bd) + bw) / bands;
 	vec3 water = mix(water_color, deep_color, dcol);
-	water = mix(water, color.rgb, 0.35);
+	water = mix(water, color.rgb, 0.42);
 
 	// Slow lanes behind rocks read slightly darker: a wake tint.
 	float wake = clamp(1.0 - fspeed * 1.5, 0.0, 0.5);
@@ -76,7 +85,7 @@ vec4 effect(vec4 color, Image tex, vec2 uv, vec2 screen) {
 
 	// Height sheen: a faint lightening band on the shallow shelves.
 	float shelf = clamp((1.0 - depth) * 2.0, 0.0, 1.0) * (0.5 + 0.5 * fbm(vec2(along * 8.0, across * 4.0)));
-	c += vec3(0.22, 0.28, 0.30) * shelf * 0.06;
+	c += vec3(0.22, 0.28, 0.30) * shelf * 0.075;
 
 	// Surface sparkle: few, bright, sitting on the fast shallow lanes.
 	c += spec * (0.03 + 0.04 * fspeed) * depth * vec3(0.75, 0.85, 0.90);
