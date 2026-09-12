@@ -2,10 +2,12 @@
 
 local draw = require "draw"
 local debug_ui = require "ui.debug"
+local flybox_ui = require "ui.flybox"
 local fish = require "entity.fish"
 local load_screen = require "ui.splash"
+local sfx = require "sfx"
 
-local world, dbg, boot
+local world, dbg, boot, flybox
 
 -- Spawn the seeded school for the current river.
 local function spawn_entities()
@@ -26,8 +28,10 @@ local function ctrl(id, kind, get, set, extra)
 	return extra
 end
 
--- Build the debug panel for the current world.
+-- Build the debug panel for the current world. Flat list.
+-- Seed and fps always visible. All knobs reachable.
 local function build_panel()
+	world.sound = world.sound or 0.64
 	dbg = debug_ui.new({
 		controls = {
 			ctrl("seed", "seed", function() return world.seed end, reseed,
@@ -37,6 +41,11 @@ local function build_panel()
 			end, function() end),
 			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
 			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
+			ctrl("sound", "float",
+				function() return world.sound end,
+				function(v) world.sound = v sfx.level(v) end,
+				{ min = 0, max = 1, step = 0.05 }),
+			ctrl("fish tags", "bool", function() return world.show_fish end, function(v) world.show_fish = v end),
 			ctrl("current", "float",
 				function() return world.river.flow.base_speed / world.river.flow.base end,
 				function(v) world.river.flow.base_speed = world.river.flow.base * v world.river:touch_flow() end,
@@ -53,19 +62,16 @@ local function build_panel()
 				function() return world.river.water_sheen end,
 				function(v) world.river.water_sheen = v end,
 				{ min = 0, max = 1, step = 0.05 }),
-			ctrl("show_flow", "bool", function() return world.river.show_flow end, function(v) world.river.show_flow = v end),
-			ctrl("show_fish", "bool", function() return world.show_fish end, function(v) world.show_fish = v end, { label = "fish tags" }),
-			ctrl("bed", "label", function()
-				return world.river.char.bed_type.id
-			end, function() end),
+			ctrl("show flow", "bool", function() return world.river.show_flow end, function(v) world.river.show_flow = v end),
 		},
 	})
+	sfx.level(world.sound)
 end
 
 -- Load the splash first. Heavy build runs as staged steps so
--- the bar, the chase, and the wire stay live.
+-- the reel and the wall stay live.
 function love.load()
-	boot = { screen = load_screen.new(), done = 0, total = 5, water = nil }
+	boot = { screen = load_screen.new(), done = 0, total = 6, water = nil }
 end
 
 -- One build step per beat of the step timer.
@@ -84,6 +90,9 @@ local function boot_step()
 		spawn_entities()
 	elseif n == 5 then
 		build_panel()
+		flybox = flybox_ui.new()
+	elseif n == 6 then
+		sfx.build()
 	end
 	boot.done = n
 	boot.screen.progress = n / boot.total
@@ -110,6 +119,10 @@ function love.update(dt)
 	dt = dt * world.time_scale
 	world.river:update(dt)
 	fish.update(world.fish, dt, world.river, nil)
+	-- Water bed follows the beat. Flow norm plus turbulence
+	-- steer the three voices.
+	local u = math.max(0, math.min(1, (world.river.flow.base_speed - 0.45) / 1.1))
+	sfx.water(dt, u, world.river.flow.turb_scale or 0)
 end
 
 -- Draw splash while booting, world after.
@@ -123,6 +136,7 @@ function love.draw()
 	if world.show_fish then
 		fish.draw_indicators(world.fish)
 	end
+	flybox:draw()
 	dbg:draw()
 end
 
@@ -137,9 +151,12 @@ function love.keypressed(key)
 	if dbg:keypressed(key) then
 		return
 	end
+	-- Esc closes the drawer. Nothing quits the game by key.
 	if key == "escape" then
-		love.event.quit()
-	elseif key == "f12" then
+		flybox.open = false
+		return
+	end
+	if key == "f12" then
 		-- Save to the write dir as current.png; format comes first here.
 		love.graphics.captureScreenshot(function(img)
 			img:encode("png", "current.png")
@@ -154,4 +171,20 @@ function love.resize(w, h)
 	end
 	world.river:resize(w, h)
 	spawn_entities()
+end
+
+-- Route clicks to the fly box first.
+function love.mousepressed(x, y, button)
+	if boot or button ~= 1 then
+		return
+	end
+	flybox:mousepressed(x, y)
+end
+
+-- Wheel scrolls the fly box list while it is open.
+function love.wheelmoved(dx, dy)
+	if boot then
+		return
+	end
+	flybox:wheelmoved(dx, dy)
 end

@@ -4,9 +4,16 @@ local debug = {}
 debug.__index = debug
 
 local PANEL_W, ROW_H, PAD = 280, 22, 12
+local SEL = { 0.95, 0.88, 0.60 }
 
--- Format a control value for the panel. Seed rows show the
--- bed too, as num plus name.
+-- UI theme, shared with flybox and fish tags.
+debug.BG = { 0.10, 0.11, 0.08 }
+debug.EDGE = { 0.42, 0.46, 0.32 }
+debug.TEXT = { 0.78, 0.76, 0.62 }
+debug.DIM = { 0.55, 0.54, 0.42 }
+debug.HI = { 0.28, 0.32, 0.18 }
+
+-- Format a control value for the panel.
 local function format_value(ctrl)
 	local v = ctrl.get()
 	if v == nil then
@@ -50,17 +57,22 @@ local function nudge(ctrl, dir)
 	if ctrl.max then
 		v = math.min(ctrl.max, v)
 	end
-	-- Poisons from NaN or infinity never reach the sim: keep the old value.
 	if not (v == v) or v == math.huge or v == -math.huge then
 		return
 	end
 	ctrl.set(v)
 end
 
--- Create a closed panel with optional controls.
+-- Create a closed panel with optional controls and a mono font.
 function debug.new(opts)
 	opts = opts or {}
-	return setmetatable({ open = opts.open or false, selected = 1, controls = opts.controls or {} }, debug)
+	local fonts = require("ui.fonts").get()
+	return setmetatable({
+		open = opts.open or false,
+		selected = 1,
+		controls = opts.controls or {},
+		font = fonts.mono,
+	}, debug)
 end
 
 -- Append a control.
@@ -84,18 +96,10 @@ function debug:keypressed(key)
 	end
 	local n = #self.controls
 	local keys = {
-		up = function()
-			self.selected = ((self.selected - 2) % n) + 1
-		end,
-		down = function()
-			self.selected = (self.selected % n) + 1
-		end,
-		left = function()
-			nudge(self.controls[self.selected], -1)
-		end,
-		right = function()
-			nudge(self.controls[self.selected], 1)
-		end,
+		up = function() self.selected = ((self.selected - 2) % n) + 1 end,
+		down = function() self.selected = (self.selected % n) + 1 end,
+		left = function() nudge(self.controls[self.selected], -1) end,
+		right = function() nudge(self.controls[self.selected], 1) end,
 	}
 	if not keys[key] then
 		return false
@@ -104,35 +108,41 @@ function debug:keypressed(key)
 	return true
 end
 
--- Draw the overlay when open.
+-- Draw the overlay when open, top right. Selected row reads
+-- through text colour alone, no focus box.
 function debug:draw()
 	if not self.open then
 		return
 	end
-	local controls, h, x, y = self.controls, PAD * 2 + (#self.controls + 3) * ROW_H, 16, 16
+	local controls = self.controls
+	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+	local x, y = w - PANEL_W - 16, 16
+	local panel_h = PAD * 2 + (#controls + 2) * ROW_H
 	love.graphics.push("all")
+	love.graphics.setFont(self.font)
 	love.graphics.origin()
 	love.graphics.setLineWidth(1)
-	love.graphics.setColor(0.10, 0.11, 0.08, 0.88)
-	love.graphics.rectangle("fill", x, y, PANEL_W, h, 3, 3)
-	love.graphics.setColor(0.42, 0.46, 0.32, 0.9)
-	love.graphics.rectangle("line", x, y, PANEL_W, h, 3, 3)
-	love.graphics.setColor(0.82, 0.80, 0.68)
+	love.graphics.setColor(debug.BG[1], debug.BG[2], debug.BG[3], 0.92)
+	love.graphics.rectangle("fill", x, y, PANEL_W, panel_h, 3, 3)
+	love.graphics.setColor(debug.EDGE[1], debug.EDGE[2], debug.EDGE[3], 0.9)
+	love.graphics.rectangle("line", x, y, PANEL_W, panel_h, 3, 3)
+	love.graphics.setColor(debug.TEXT[1], debug.TEXT[2], debug.TEXT[3])
 	love.graphics.print("debug", x + PAD, y + 8)
-	love.graphics.setColor(0.55, 0.54, 0.42)
+	love.graphics.setColor(debug.DIM[1], debug.DIM[2], debug.DIM[3])
 	love.graphics.print("F1", x + PANEL_W - PAD - 18, y + 8)
 	for i = 1, #controls do
 		local cy = y + PAD + (i + 0.4) * ROW_H
+		local c = controls[i]
 		if i == self.selected then
-			love.graphics.setColor(0.28, 0.32, 0.18, 0.95)
-			love.graphics.rectangle("fill", x + 6, cy - 3, PANEL_W - 12, ROW_H - 2, 2, 2)
+			love.graphics.setColor(SEL[1], SEL[2], SEL[3])
+		else
+			love.graphics.setColor(debug.TEXT[1], debug.TEXT[2], debug.TEXT[3])
 		end
-		love.graphics.setColor(0.78, 0.76, 0.62)
-		love.graphics.print(controls[i].label or controls[i].id or "?", x + PAD, cy)
-		love.graphics.printf(format_value(controls[i]), x + PAD, cy, PANEL_W - PAD * 2, "right")
+		love.graphics.print(c.label or c.id or "?", x + PAD, cy)
+		love.graphics.printf(format_value(c), x + PAD, cy, PANEL_W - PAD * 2, "right")
 	end
-	love.graphics.setColor(0.50, 0.49, 0.38)
-	love.graphics.print("arrows adjust   F1 panel", x + PAD, y + h - PAD - ROW_H)
+	love.graphics.setColor(debug.DIM[1], debug.DIM[2], debug.DIM[3])
+	love.graphics.print("arrows adjust   F1 close", x + PAD, y + panel_h - PAD - ROW_H)
 	love.graphics.pop()
 end
 
