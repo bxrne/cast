@@ -418,8 +418,10 @@ function river:draw_flow()
 			local slow = { 0.18, 0.36, 0.75 }
 			local fleet = { 0.28, 0.86, 0.82 }
 			local hot = { 0.95, 0.55, 0.25 }
-			local c_r, c_g, c_b = mix3r(mix3r(slow, fleet, fast), hot, eddy * 0.75)
-			love.graphics.setColor(c_r, c_g, c_b, 0.82)
+			-- Two-stage blend: slow->fleet by fast, then ->hot by eddy.
+			local ir, ig, ib = mix3r(slow, fleet, fast)
+			local lr, lg, lb = lerp(ir, hot[1], eddy * 0.75), lerp(ig, hot[2], eddy * 0.75), lerp(ib, hot[3], eddy * 0.75)
+			love.graphics.setColor(lr, lg, lb, 0.82)
 			local tip = 8 + s.speed * 30 + (0.4 + eddy * 0.6) * nse * 5
 			local cth, sn = math.cos(nse), math.sin(nse)
 			local ex, ey = s.tx * cth - s.ty * sn, s.tx * sn + s.ty * cth
