@@ -1,0 +1,10 @@
+{
+  "id": "bedrock",
+  "water": [0.16, 0.36, 0.50],
+  "water_deep": [0.05, 0.18, 0.34],
+  "bed": [0.30, 0.32, 0.34],
+  "spot": [0.18, 0.20, 0.24],
+  "depth_scale": 1.22,
+  "pool_contrast": 0.8,
+  "obs": {"rocks": 16, "rock_r": 22}
+}

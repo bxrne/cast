@@ -6,6 +6,7 @@ local flybox_ui = require "ui.flybox"
 local fish = require "entity.fish"
 local birds = require "entity.birds"
 local insects = require "entity.insects"
+local data = require "lib.data"
 local load_screen = require "ui.splash"
 local sfx = require "sfx"
 
@@ -114,6 +115,7 @@ end
 -- Load the splash first. Heavy build runs as staged steps so
 -- the reel and the wall stay live.
 function love.load()
+	pcall(function() love.window.maximize() end)
 	boot = { screen = load_screen.new(), done = 0, total = 6, water = nil }
 	sfx.reel_start()
 end
@@ -123,7 +125,9 @@ end
 local function boot_step()
 	local n = boot.done + 1
 	if n == 1 then
-		-- Steps 1+2: shader and fish preload are independent.
+		-- Steps 1+2: entity config and shaders first, then the
+		-- fish preload. Both independent.
+		data.load()
 		local code = love.filesystem.read("draw/water.glsl")
 		assert(code, "draw/water.glsl")
 		boot.water = love.graphics.newShader(code)

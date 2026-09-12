@@ -3,16 +3,10 @@ local species = require "entity.species"
 local mind = require "entity.mind"
 local habitat = require "entity.habitat"
 local mathx = require "lib.math"
+local MANNERS = require("lib.data").group("rises")
 
 local fish = {}
 local clamp, hash01, lerp, mix3 = mathx.clamp, mathx.hash01, mathx.lerp, mathx.mix3
-local MANNERS = {
-	sip = { duration = 0.55, height = 2.2, ring = 6, drops = 0 },
-	rise = { duration = 1.05, height = 5.5, ring = 12, drops = 3 },
-	head_and_tail = { duration = 1.35, height = 4.2, ring = 10, drops = 2 },
-	splash = { duration = 0.7, height = 6.5, ring = 16, drops = 7 },
-	porpoise = { duration = 1.7, height = 7.5, ring = 14, drops = 5 },
-}
 
 -- Reused scratch for pose lookups. No alloc in the hot loop.
 local SCRATCH = {}
@@ -502,7 +496,7 @@ function fish.draw(list, river)
 			local along, lat, w = segment(self, u, len, phase, slither, tail_amp, act.steady)
 			local wx = self.x + ca * (along + surge) - sa * lat
 			local wy = self.y + lift + sa * (along + surge) + ca * lat
-			love.graphics.ellipse("fill", wx, wy, len * 0.11, w * 0.5, ang, 8)
+			love.graphics.ellipse("fill", wx, wy, len * 0.11, w * 0.5, 8)
 		end
 		local tu = 0.82
 		local along, lat = segment(self, tu, len, phase, slither, tail_amp * 1.2, act.steady)

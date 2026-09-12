@@ -4,21 +4,15 @@
 -- or drops onto a rock. Drawn simple: perched body and head,
 -- flying body with two flap triangles, plus a water shadow.
 local mathx = require "lib.math"
+local data = require "lib.data"
 
 local birds = {}
 local clamp, hash01, lerp, TAU = mathx.clamp, mathx.hash01, mathx.lerp, mathx.TAU
 
--- Two visitors, both big waders. The roster stays small on
--- purpose: a grey heron and a white egret read against any
--- bed without relying on the seed. spook_r is the screen
--- radius that scurries fish. flow_pref 0 still water,
--- 1 fast water. chest is a bright bib that reads against
--- grey rock. bob is the idle dip amplitude so perched
--- birds move.
-birds.TYPES = {
-	{ id = "heron", size = 24, body = { 0.42, 0.46, 0.52 }, wing = { 0.30, 0.33, 0.38 }, chest = { 0.88, 0.88, 0.84 }, beak = { 0.90, 0.74, 0.28 }, bob = 0.6, spook_r = 170, cruise = 130, alt = 90, beds = { silt = 1.0, peat = 0.9, gravel = 0.7, chalk = 0.6, bedrock = 0.4 }, flow_pref = 0.25, size_pref = 0.7 },
-	{ id = "egret", size = 20, body = { 0.93, 0.93, 0.89 }, wing = { 0.85, 0.85, 0.81 }, chest = { 0.97, 0.97, 0.93 }, beak = { 0.92, 0.72, 0.22 }, bob = 0.9, spook_r = 140, cruise = 145, alt = 80, beds = { chalk = 1.0, gravel = 0.9, silt = 0.8, peat = 0.6, bedrock = 0.4 }, flow_pref = 0.4, size_pref = 0.6 },
-}
+-- Two visitors from data/birds, one file per bird. Both big
+-- waders, so the roster reads against any bed without
+-- relying on the seed.
+birds.TYPES = data.list("birds")
 
 -- Weight one type for this water. Form mirrors species
 -- weights: bed sets the base, flow and size pull the mix.
@@ -253,51 +247,87 @@ local function shadow(b)
 	end
 	local k = clamp(1 - b.alt / (b.type.alt + 40), 0.15, 0.7)
 	love.graphics.setColor(0.05, 0.08, 0.10, 0.30 * k)
-	love.graphics.ellipse("fill", b.x, b.y + 4, b.type.size * 0.7 * k + 4, 4, 0, 10)
+	love.graphics.ellipse("fill", b.x, b.y + 4, b.type.size * 0.7 * k + 4, 4, 10)
 end
 
--- Perched body: legs, outlined chest with a bright bib, head,
--- beak, tail. The dark outline and pale bib lift the bird off
--- grey rock. Idle bob keeps it alive while it sits.
+local OUTLINE = { 0.08, 0.07, 0.06 }
+
+-- Perched wader: stilt legs with feet, level body, kinked
+-- neck, dagger beak, tail wedge. Dark outline plus pale bib
+-- lift it off grey rock. Idle bob keeps it alive. Herons
+-- wear a black crest spike, egrets two nuchal plumes.
 local function draw_perched(b)
 	local s = b.type.size / 12
+	local neck = b.type.neck or 1
 	local bob = math.sin(b.clock * 6 + b.id * 2.4) * (b.type.bob or 1)
-	local x, y = b.x, b.y + bob * 0.5
-	love.graphics.setColor(0.16, 0.14, 0.12, 1)
-	love.graphics.line(x - 3 * s, b.y, x - 3 * s, y - 8 * s)
-	love.graphics.line(x + 3 * s, b.y, x + 3 * s, y - 8 * s)
-	love.graphics.setColor(0.08, 0.07, 0.06, 1)
-	love.graphics.ellipse("fill", x, y - 12 * s, 8.2 * s, 10.2 * s, 0.15, 12)
-	love.graphics.circle("fill", x + 3 * s, y - 22 * s, 5.7 * s, 10)
+	local x, yb = b.x, b.y + bob * 0.5
+	local leg, by = 13 * s, yb - 13 * s - 5 * s
+	love.graphics.setColor(0.12, 0.11, 0.10, 1)
+	love.graphics.line(x - 3 * s, yb, x - 3 * s, yb - leg)
+	love.graphics.line(x + 3 * s, yb, x + 3 * s, yb - leg)
+	love.graphics.line(x - 3 * s, yb, x - 6 * s, yb)
+	love.graphics.line(x + 3 * s, yb, x + 6 * s, yb)
+	love.graphics.setColor(OUTLINE[1], OUTLINE[2], OUTLINE[3], 1)
+	love.graphics.ellipse("fill", x, by, 11 * s, 7 * s, 12)
 	love.graphics.setColor(b.type.body[1], b.type.body[2], b.type.body[3], 1)
-	love.graphics.ellipse("fill", x, y - 12 * s, 7 * s, 9 * s, 0.15, 12)
-	love.graphics.circle("fill", x + 3 * s, y - 22 * s, 4.5 * s, 10)
+	love.graphics.ellipse("fill", x, by, 10 * s, 6 * s, 12)
+	love.graphics.polygon("fill", x - 9 * s, by - 1 * s, x - 15 * s, by - 4 * s, x - 9 * s, by - 5 * s)
 	local chest = b.type.chest or { 0.9, 0.89, 0.84 }
 	love.graphics.setColor(chest[1], chest[2], chest[3], 1)
-	love.graphics.ellipse("fill", x + 1 * s, y - 11 * s, 3.8 * s, 5.5 * s, 0.15, 10)
+	love.graphics.ellipse("fill", x + 3 * s, by + 1 * s, 4.5 * s, 4 * s, 10)
+	local kx, ky = x + 11 * s, by - 12 * s * neck
+	local hx, hy = x + 9 * s, by - 21 * s * neck
+	love.graphics.setColor(OUTLINE[1], OUTLINE[2], OUTLINE[3], 1)
+	love.graphics.setLineWidth(4 * s)
+	love.graphics.line(x + 7 * s, by - 2 * s, kx, ky, hx, hy)
+	love.graphics.setLineWidth(1)
+	love.graphics.setColor(b.type.body[1], b.type.body[2], b.type.body[3], 1)
+	love.graphics.line(x + 7 * s, by - 2 * s, kx, ky, hx, hy)
+	love.graphics.circle("fill", hx, hy, 3.6 * s, 10)
 	love.graphics.setColor(b.type.beak[1], b.type.beak[2], b.type.beak[3], 1)
-	love.graphics.line(x + 6 * s, y - 22 * s, x + 12 * s, y - 20 * s)
-	love.graphics.setColor(b.type.wing[1], b.type.wing[2], b.type.wing[3], 1)
-	love.graphics.line(x - 6 * s, y - 8 * s, x - 12 * s, y - 2 * s)
+	love.graphics.polygon("fill", hx + 2 * s, hy - 1 * s, hx + 11 * s, hy + 0.5 * s, hx + 2 * s, hy + 2 * s)
+	if b.type.id == "heron" then
+		love.graphics.setColor(OUTLINE[1], OUTLINE[2], OUTLINE[3], 1)
+		love.graphics.line(hx - 2 * s, hy - 2 * s, hx - 9 * s, hy - 5 * s)
+	else
+		love.graphics.setColor(chest[1], chest[2], chest[3], 1)
+		love.graphics.line(hx - 2 * s, hy - 2 * s, hx - 8 * s, hy - 4 * s)
+		love.graphics.line(hx - 2 * s, hy - 1 * s, hx - 8 * s, hy - 2 * s)
+	end
 end
 
--- Flying body with two flap triangles along the heading.
+-- Flying wader: folded head, broad fingered wings, tail fan,
+-- legs trailing past the tail. Wings beat around the glide.
 local function draw_flying(b)
 	local x, y = b.x, b.y - b.alt
 	local dx, dy = b.tx - b.fx, b.ty - b.fy
 	local len = math.sqrt(dx * dx + dy * dy)
 	local ang = len > 1 and math.atan2(dy, dx) or 0
 	local s = b.type.size / 12
-	local beat = math.sin(b.flap) * (6 + 4 * s)
+	local beat = math.sin(b.flap) * (5 + 3 * s)
 	love.graphics.push()
 	love.graphics.translate(x, y)
 	love.graphics.rotate(ang)
+	love.graphics.setColor(0.12, 0.11, 0.10, 1)
+	love.graphics.line(-6 * s, -1.5 * s, -16 * s, -1.5 * s)
+	love.graphics.line(-6 * s, 1.5 * s, -16 * s, 1.5 * s)
+	love.graphics.line(-16 * s, -1.5 * s, -18 * s, -1.5 * s)
+	love.graphics.line(-16 * s, 1.5 * s, -18 * s, 1.5 * s)
 	love.graphics.setColor(b.type.wing[1], b.type.wing[2], b.type.wing[3], 1)
-	love.graphics.polygon("fill", 0, 0, -4 * s, -10 * s - beat, -12 * s, -2 * s)
-	love.graphics.polygon("fill", 0, 0, -4 * s, 10 * s + beat, -12 * s, 2 * s)
+	love.graphics.polygon("fill", -7 * s, 0, -13 * s, -4 * s, -13 * s, 4 * s)
+	love.graphics.setColor(OUTLINE[1], OUTLINE[2], OUTLINE[3], 1)
+	love.graphics.ellipse("fill", 0, 0, 10 * s, 4 * s, 12)
 	love.graphics.setColor(b.type.body[1], b.type.body[2], b.type.body[3], 1)
-	love.graphics.ellipse("fill", 0, 0, 8 * s, 3.2 * s, 0, 10)
-	love.graphics.circle("fill", 7 * s, 0, 2.6 * s, 8)
+	love.graphics.ellipse("fill", 0, 0, 9 * s, 3.2 * s, 10)
+	love.graphics.circle("fill", 6 * s, -1 * s, 2.8 * s, 8)
+	love.graphics.setColor(b.type.beak[1], b.type.beak[2], b.type.beak[3], 1)
+	love.graphics.polygon("fill", 8 * s, -1.6 * s, 12 * s, -0.6 * s, 8 * s, 0.4 * s)
+	love.graphics.setColor(b.type.body[1], b.type.body[2], b.type.body[3], 1)
+	love.graphics.polygon("fill", 0, -1 * s, -5 * s, -13 * s - beat, -11 * s, -4 * s)
+	love.graphics.polygon("fill", 0, 1 * s, -5 * s, 13 * s + beat, -11 * s, 4 * s)
+	love.graphics.setColor(b.type.wing[1], b.type.wing[2], b.type.wing[3], 1)
+	love.graphics.line(-5 * s, -13 * s - beat, -11 * s, -4 * s)
+	love.graphics.line(-5 * s, 13 * s + beat, -11 * s, 4 * s)
 	love.graphics.pop()
 end
 

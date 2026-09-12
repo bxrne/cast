@@ -1,34 +1,10 @@
--- Shared trout fly catalog. Twelve working patterns drawn from
--- standard tying recipes. kind sets the body plan: dry rides
--- high, wet swings, nymph drifts deep, streamer strips.
+-- Trout fly catalog from data/lures, one file per pattern.
+-- kind sets the body plan: dry rides high, wet swings,
+-- nymph drifts deep, streamer strips. Artwork stays in code
+-- below, keyed by pattern name.
 local flies = {}
 
-flies.list = {
-	{ name = "adams", kind = "dry", s = 1.0,
-		rig = "dry, hooks 12 to 18", water = "riffles and current seams", tip = "First pick for an unknown hatch. Dead drift only." },
-	{ name = "blue winged olive", kind = "dry", s = 0.85,
-		rig = "dry, hooks 16 to 20", water = "slow tailouts", tip = "Cloudy afternoons. Go a size smaller than you think." },
-	{ name = "elk hair caddis", kind = "dry", s = 0.95,
-		rig = "dry, hooks 12 to 16", water = "fast pocket water", tip = "Skate it an inch at the end of the drift." },
-	{ name = "royal wulff", kind = "dry", s = 1.05,
-		rig = "dry, hooks 10 to 14", water = "rough runs", tip = "High floater for broken water. Easy to track." },
-	{ name = "griffiths gnat", kind = "dry", s = 0.6,
-		rig = "dry, hooks 18 to 22", water = "flat glassy pools", tip = "Midge clusters. Long light tippet, no drag." },
-	{ name = "stimulator", kind = "dry", s = 1.2,
-		rig = "dry, hooks 8 to 12", water = "summer riffles", tip = "Stonefly big meal. Browns move far for it." },
-	{ name = "partridge and orange", kind = "wet", s = 0.9,
-		rig = "wet, hooks 12 to 16", water = "seams, swung down", tip = "Swing across and let it lift at the hang." },
-	{ name = "leadwing coachman", kind = "wet", s = 0.95,
-		rig = "wet, hooks 10 to 14", water = "runs, swung or stripped", tip = "Old reliable when nothing shows on top." },
-	{ name = "pheasant tail", kind = "nymph", s = 0.9,
-		rig = "nymph, hooks 14 to 20", water = "deep slots, dead drifted", tip = "Matches most mayfly nymphs. Fish it deep." },
-	{ name = "hares ear", kind = "nymph", s = 1.0,
-		rig = "nymph, hooks 12 to 16", water = "pools and eddies", tip = "Scruffy wins. Trail it behind a heavier fly." },
-	{ name = "copper john", kind = "nymph", s = 0.85,
-		rig = "nymph, hooks 10 to 18", water = "fast deep slots", tip = "Heavy dropper that punches through current." },
-	{ name = "woolly bugger", kind = "streamer", s = 1.5,
-		rig = "streamer, hooks 6 to 10", water = "undercut banks and pools", tip = "Strip, pause, hang on. Moves the big browns." },
-}
+flies.list = require("lib.data").list("lures")
 
 local DARK = { 0.15, 0.14, 0.12 }
 local CREAM = { 0.88, 0.85, 0.72 }
@@ -54,10 +30,10 @@ local function adams(s)
 	love.graphics.line(-22 * s, 0, -13 * s, 0)
 	love.graphics.line(-22 * s, 4 * s, -13 * s, 0)
 	love.graphics.setColor(0.50, 0.50, 0.48, 1)
-	love.graphics.ellipse("fill", -3 * s, 0, 11 * s, 4.6 * s, 0, 10)
+	love.graphics.ellipse("fill", -3 * s, 0, 11 * s, 4.6 * s, 10)
 	love.graphics.setColor(0.62, 0.62, 0.60, 1)
-	love.graphics.ellipse("fill", 5 * s, -14 * s, 4.4 * s, 10 * s, -0.22, 10)
-	love.graphics.ellipse("fill", 11 * s, -14 * s, 4.4 * s, 10 * s, 0.22, 10)
+	love.graphics.ellipse("fill", 5 * s, -14 * s, 4.4 * s, 10 * s, 10)
+	love.graphics.ellipse("fill", 11 * s, -14 * s, 4.4 * s, 10 * s, 10)
 	love.graphics.setColor(0.25, 0.25, 0.25, 1)
 	love.graphics.line(5 * s, -22 * s, 5 * s, -8 * s)
 	love.graphics.line(11 * s, -22 * s, 11 * s, -8 * s)
@@ -79,10 +55,10 @@ local function bwo(s)
 	love.graphics.setColor(0.50, 0.48, 0.30, 1)
 	love.graphics.line(-20 * s, 0, -13 * s, 0)
 	love.graphics.setColor(0.45, 0.46, 0.24, 1)
-	love.graphics.ellipse("fill", -3 * s, 0, 10 * s, 4.0 * s, 0, 10)
+	love.graphics.ellipse("fill", -3 * s, 0, 10 * s, 4.0 * s, 10)
 	love.graphics.setColor(0.55, 0.58, 0.60, 1)
-	love.graphics.ellipse("fill", 5 * s, -12 * s, 4.0 * s, 9 * s, -0.22, 10)
-	love.graphics.ellipse("fill", 11 * s, -12 * s, 4.0 * s, 9 * s, 0.22, 10)
+	love.graphics.ellipse("fill", 5 * s, -12 * s, 4.0 * s, 9 * s, 10)
+	love.graphics.ellipse("fill", 11 * s, -12 * s, 4.0 * s, 9 * s, 10)
 	love.graphics.setColor(0.60, 0.62, 0.62, 1)
 	for i = -1, 1 do
 		love.graphics.line(8 * s + i * 3 * s, 1 * s, 8 * s + i * 4 * s, -9 * s)
@@ -95,7 +71,7 @@ local function elk(s)
 	hook(s)
 	love.graphics.setLineWidth(2)
 	love.graphics.setColor(0.55, 0.40, 0.22, 1)
-	love.graphics.ellipse("fill", -2 * s, 0, 12 * s, 4.6 * s, 0, 12)
+	love.graphics.ellipse("fill", -2 * s, 0, 12 * s, 4.6 * s, 12)
 	love.graphics.setColor(0.50, 0.36, 0.20, 1)
 	for i = -3, 3 do
 		love.graphics.line(-2 * s + i * 3 * s, 4 * s, -2 * s + i * 3.6 * s, -5 * s)
@@ -114,14 +90,14 @@ local function wulff(s)
 	love.graphics.setColor(0.45, 0.30, 0.18, 1)
 	love.graphics.line(-22 * s, 0, -13 * s, 0)
 	love.graphics.setColor(0.20, 0.22, 0.18, 1)
-	love.graphics.ellipse("fill", -7 * s, 0, 7 * s, 4.6 * s, 0, 10)
+	love.graphics.ellipse("fill", -7 * s, 0, 7 * s, 4.6 * s, 10)
 	love.graphics.setColor(0.62, 0.20, 0.14, 1)
-	love.graphics.ellipse("fill", 1 * s, 0, 5 * s, 4.8 * s, 0, 10)
+	love.graphics.ellipse("fill", 1 * s, 0, 5 * s, 4.8 * s, 10)
 	love.graphics.setColor(0.20, 0.22, 0.18, 1)
-	love.graphics.ellipse("fill", 8 * s, 0, 5 * s, 4.6 * s, 0, 10)
+	love.graphics.ellipse("fill", 8 * s, 0, 5 * s, 4.6 * s, 10)
 	love.graphics.setColor(0.88, 0.86, 0.76, 1)
-	love.graphics.ellipse("fill", 5 * s, -14 * s, 4.4 * s, 10 * s, -0.22, 10)
-	love.graphics.ellipse("fill", 11 * s, -14 * s, 4.4 * s, 10 * s, 0.22, 10)
+	love.graphics.ellipse("fill", 5 * s, -14 * s, 4.4 * s, 10 * s, 10)
+	love.graphics.ellipse("fill", 11 * s, -14 * s, 4.4 * s, 10 * s, 10)
 	love.graphics.setColor(0.45, 0.30, 0.18, 1)
 	for i = -2, 2 do
 		love.graphics.line(8 * s + i * 2.4 * s, 1 * s, 8 * s + i * 3.4 * s, -11 * s)
@@ -133,7 +109,7 @@ end
 local function gnat(s)
 	hook(s, 4)
 	love.graphics.setColor(0.22, 0.24, 0.20, 1)
-	love.graphics.ellipse("fill", 0, 0, 9 * s, 6 * s, 0, 12)
+	love.graphics.ellipse("fill", 0, 0, 9 * s, 6 * s, 12)
 	love.graphics.setColor(0.60, 0.60, 0.58, 1)
 	love.graphics.setLineWidth(2)
 	for i = -3, 3 do
@@ -151,7 +127,7 @@ local function stimulator(s)
 	love.graphics.line(-24 * s, -3 * s, -13 * s, 0)
 	love.graphics.line(-24 * s, 3 * s, -13 * s, 0)
 	love.graphics.setColor(0.66, 0.42, 0.16, 1)
-	love.graphics.ellipse("fill", -3 * s, 0, 13 * s, 5 * s, 0, 12)
+	love.graphics.ellipse("fill", -3 * s, 0, 13 * s, 5 * s, 12)
 	love.graphics.setColor(0.72, 0.58, 0.36, 1)
 	love.graphics.polygon("fill", -10 * s, -4 * s, 8 * s, -12 * s, 12 * s, -5 * s, -8 * s, -1 * s)
 	love.graphics.setColor(0.55, 0.36, 0.16, 1)
@@ -186,10 +162,10 @@ local function coachman(s)
 	love.graphics.setColor(0.45, 0.42, 0.30, 1)
 	love.graphics.line(-20 * s, 0, -13 * s, 0)
 	love.graphics.setColor(0.22, 0.24, 0.20, 1)
-	love.graphics.ellipse("fill", -2 * s, 0, 12 * s, 4.6 * s, 0, 12)
+	love.graphics.ellipse("fill", -2 * s, 0, 12 * s, 4.6 * s, 12)
 	love.graphics.setColor(0.35, 0.36, 0.38, 0.95)
-	love.graphics.ellipse("fill", -1 * s, -3 * s, 13 * s, 4.6 * s, -0.30, 12)
-	love.graphics.ellipse("fill", -1 * s, 3 * s, 13 * s, 4.6 * s, 0.30, 12)
+	love.graphics.ellipse("fill", -1 * s, -3 * s, 13 * s, 4.6 * s, 12)
+	love.graphics.ellipse("fill", -1 * s, 3 * s, 13 * s, 4.6 * s, 12)
 	love.graphics.setColor(0.45, 0.30, 0.18, 1)
 	for i = -1, 1 do
 		love.graphics.line(8 * s + i * 2.6 * s, 1 * s, 8 * s + i * 3.4 * s, -8 * s)
@@ -206,7 +182,7 @@ local function pheasant(s)
 	love.graphics.line(-20 * s, -3 * s, -14 * s, 0)
 	love.graphics.line(-20 * s, 3 * s, -14 * s, 0)
 	love.graphics.setColor(0.48, 0.36, 0.20, 1)
-	love.graphics.ellipse("fill", -4 * s, 0, 11 * s, 4.0 * s, 0, 12)
+	love.graphics.ellipse("fill", -4 * s, 0, 11 * s, 4.0 * s, 12)
 	love.graphics.setColor(0.72, 0.44, 0.20, 1)
 	for i = -2, 2 do
 		love.graphics.line(-4 * s + i * 4 * s, -4 * s, -4 * s + i * 4 * s, 4 * s)
@@ -228,7 +204,7 @@ local function hares(s)
 	love.graphics.line(-19 * s, -3 * s, -13 * s, 0)
 	love.graphics.line(-19 * s, 3 * s, -13 * s, 0)
 	love.graphics.setColor(0.55, 0.48, 0.32, 1)
-	love.graphics.ellipse("fill", -2 * s, 0, 12 * s, 5 * s, 0, 12)
+	love.graphics.ellipse("fill", -2 * s, 0, 12 * s, 5 * s, 12)
 	love.graphics.setColor(0.65, 0.58, 0.40, 1)
 	for i = -3, 3 do
 		love.graphics.line(-2 * s + i * 3 * s, 4 * s, -2 * s + i * 3.8 * s, -5 * s)
@@ -251,13 +227,13 @@ local function copper(s)
 	love.graphics.line(-19 * s, -4 * s, -13 * s, -1 * s)
 	love.graphics.line(-19 * s, 4 * s, -13 * s, 1 * s)
 	love.graphics.setColor(0.62, 0.32, 0.14, 1)
-	love.graphics.ellipse("fill", -4 * s, 0, 10 * s, 4.4 * s, 0, 12)
+	love.graphics.ellipse("fill", -4 * s, 0, 10 * s, 4.4 * s, 12)
 	love.graphics.setColor(0.35, 0.16, 0.08, 1)
 	for i = -2, 2 do
 		love.graphics.line(-4 * s + i * 3.6 * s, -4.2 * s, -4 * s + i * 3.6 * s, 4.2 * s)
 	end
 	love.graphics.setColor(0.22, 0.26, 0.20, 1)
-	love.graphics.ellipse("fill", 5 * s, 0, 5 * s, 4.8 * s, 0, 10)
+	love.graphics.ellipse("fill", 5 * s, 0, 5 * s, 4.8 * s, 10)
 	love.graphics.setColor(0.30, 0.26, 0.20, 1)
 	love.graphics.polygon("fill", 1 * s, -4.4 * s, 9 * s, -5 * s, 9 * s, 5 * s, 1 * s, 4.4 * s)
 	love.graphics.setColor(0.85, 0.88, 0.90, 1)
@@ -276,7 +252,7 @@ local function bugger(s)
 	love.graphics.setColor(0.28, 0.30, 0.20, 1)
 	love.graphics.polygon("fill", -32 * s, -2 * s, -20 * s, -9 * s, -20 * s, 9 * s, -32 * s, 2 * s)
 	love.graphics.setColor(0.30, 0.32, 0.22, 1)
-	love.graphics.ellipse("fill", -4 * s, 0, 20 * s, 6.5 * s, 0, 14)
+	love.graphics.ellipse("fill", -4 * s, 0, 20 * s, 6.5 * s, 14)
 	love.graphics.setColor(0.38, 0.40, 0.26, 1)
 	love.graphics.setLineWidth(2)
 	for i = -3, 3 do

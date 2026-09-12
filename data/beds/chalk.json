@@ -1,0 +1,11 @@
+{
+  "id": "chalk",
+  "water": [0.18, 0.36, 0.44],
+  "water_deep": [0.06, 0.20, 0.30],
+  "bed": [0.50, 0.48, 0.38],
+  "spot": [0.38, 0.36, 0.26],
+  "depth_scale": 0.82,
+  "pool_contrast": 0.32,
+  "expose": 0.6,
+  "obs": {"rocks": 8, "rock_r": 16}
+}

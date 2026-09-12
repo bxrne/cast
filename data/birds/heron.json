@@ -1,0 +1,16 @@
+{
+  "id": "heron",
+  "body": [0.42, 0.46, 0.52],
+  "wing": [0.30, 0.33, 0.38],
+  "chest": [0.88, 0.88, 0.84],
+  "beak": [0.90, 0.74, 0.28],
+  "size": 24,
+  "neck": 1.0,
+  "bob": 0.6,
+  "spook_r": 170,
+  "cruise": 130,
+  "alt": 90,
+  "flow_pref": 0.25,
+  "size_pref": 0.7,
+  "beds": {"silt": 1.0, "peat": 0.9, "gravel": 0.7, "chalk": 0.6, "bedrock": 0.4}
+}

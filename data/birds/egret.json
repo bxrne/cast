@@ -1,0 +1,16 @@
+{
+  "id": "egret",
+  "body": [0.93, 0.93, 0.89],
+  "wing": [0.85, 0.85, 0.81],
+  "chest": [0.97, 0.97, 0.93],
+  "beak": [0.92, 0.72, 0.22],
+  "size": 20,
+  "neck": 0.85,
+  "bob": 0.9,
+  "spook_r": 140,
+  "cruise": 145,
+  "alt": 80,
+  "flow_pref": 0.4,
+  "size_pref": 0.6,
+  "beds": {"chalk": 1.0, "gravel": 0.9, "silt": 0.8, "peat": 0.6, "bedrock": 0.4}
+}

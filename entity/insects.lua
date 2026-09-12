@@ -218,7 +218,7 @@ function insects.draw(list)
 			local y = f.state == "swarm" and (f.y - f.hoff) or f.y
 			if f.state == "swarm" then
 				love.graphics.setColor(0.05, 0.08, 0.10, 0.22)
-				love.graphics.ellipse("fill", f.x, f.y, 3, 1.4, 0, 8)
+				love.graphics.ellipse("fill", f.x, f.y, 3, 1.4, 8)
 			end
 			local flick = math.sin(f.clock * 40 + f.phase) > 0
 			love.graphics.setColor(0.85, 0.87, 0.82, flick and 0.9 or 0.45)

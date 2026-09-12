@@ -17,7 +17,7 @@ function sfx.build()
 		return
 	end
 	local ok, err = pcall(function()
-		local source = love.audio.newSource("assets/sfx/dragon-studio-soothing-river-flow-372456.mp3", "stream")
+		local source = love.audio.newSource("assets/sfx/babbling-brook.mp3", "stream")
 		if not source then
 			error("source creation returned nil")
 		end
