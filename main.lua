@@ -41,6 +41,7 @@ local function build_panel()
 			end, function() end),
 			ctrl("pause", "bool", function() return world.paused end, function(v) world.paused = v end),
 			ctrl("time_scale", "float", function() return world.time_scale end, function(v) world.time_scale = v end, { min = 0, max = 8, step = 0.25 }),
+			ctrl("sfx", "bool", function() return sfx.is_enabled() end, function(v) sfx.onoff(v) end),
 			ctrl("sound", "float",
 				function() return world.sound end,
 				function(v) world.sound = v sfx.level(v) require("lib.persist").save({ sound = v }) end,
@@ -92,6 +93,9 @@ local function boot_step()
 		-- Restore persisted sound level.
 		local saved = require("lib.persist").load()
 		world.sound = saved.sound or 0.64
+		if saved.sfx == 0 then
+			sfx.onoff(false)
+		end
 	elseif n == 4 then
 		-- Steps4+5+6: entities, panel, sound are independent after river.
 		spawn_entities()
@@ -128,7 +132,7 @@ function love.update(dt)
 	-- Water bed follows the beat. Flow norm plus turbulence
 	-- steer the three voices.
 	local u = math.max(0, math.min(1, (world.river.flow.base_speed - 0.45) / 1.1))
-	sfx.water(dt, u, world.river.flow.turb_scale or 0)
+	sfx.water(dt, u)
 end
 
 -- Draw splash while booting, world after.
