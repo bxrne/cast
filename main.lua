@@ -44,7 +44,7 @@ local function build_panel()
 			ctrl("sfx", "bool", function() return sfx.is_enabled() end, function(v) sfx.onoff(v) end),
 			ctrl("sound", "float",
 				function() return world.sound end,
-				function(v) world.sound = v sfx.level(v) require("lib.persist").save({ sound = v }) end,
+				function(v) world.sound = v sfx.level(v) end,
 				{ min = 0, max = 1, step = 0.05 }),
 			ctrl("fish tags", "bool", function() return world.show_fish end, function(v) world.show_fish = v end),
 			ctrl("current", "float",
@@ -90,12 +90,7 @@ local function boot_step()
 		-- Step3: river needs the shader from step1.
 		world = { seed = love.math.random(1, 24), paused = false, time_scale = 1, show_fish = false }
 		world.river = draw.river.new({ seed = world.seed, shader = boot.water })
-		-- Restore persisted sound level.
-		local saved = require("lib.persist").load()
-		world.sound = saved.sound or 0.64
-		if saved.sfx == 0 then
-			sfx.onoff(false)
-		end
+		world.sound = 0.64
 	elseif n == 4 then
 		-- Steps4+5+6: entities, panel, sound are independent after river.
 		spawn_entities()

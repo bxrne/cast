@@ -10,7 +10,7 @@ function sfx.build()
 	local good = pcall(function()
 		src = love.audio.newSource("assets/sfx/dragon-studio-soothing-river-flow-372456.mp3", "streaming")
 		src:setLooping(true)
-		src:setVolume(0)
+		src:setVolume(0.5)
 		src:play()
 	end)
 	if not good then
@@ -24,26 +24,25 @@ function sfx.water(dt, u)
 	if not src or not enabled then
 		return
 	end
-	local k = math.min(1, 3 * dt)
+	local k = math.min(1, 8 * dt)
 	local master = sfx._master or 0.64
-	local target = master * (0.15 + u * 0.55)
+	local target = master * (0.25 + u * 0.55)
 	local cur = src:getVolume()
 	src:setVolume(cur + (target - cur) * k)
 end
 
--- Master level, 0..1. Also scales the flow-driven volume.
+-- Master level, 0..1.
 function sfx.level(v)
 	sfx._master = math.max(0, math.min(1, v or 0.64))
 	if not src or not enabled then
 		return
 	end
-	src:setVolume(sfx._master * 0.40)
+	src:setVolume(sfx._master * 0.55)
 end
 
 -- On/off toggle from the debug panel.
 function sfx.onoff(v)
 	enabled = v
-	require("lib.persist").save({ sfx = v and 1 or 0, sound = sfx._master or 0.64 })
 	if not src then
 		return
 	end

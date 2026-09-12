@@ -64,14 +64,12 @@ local function nudge(ctrl, dir)
 end
 
 -- Create a closed panel with optional controls and a mono font.
--- Restores open/selected from the persist store.
 function debug.new(opts)
 	opts = opts or {}
 	local fonts = require("ui.fonts").get()
-	local saved = require("lib.persist").load()
 	return setmetatable({
-		open = saved.debug_open == 1,
-		selected = saved.debug_sel or 1,
+		open = false,
+		selected = 1,
 		controls = opts.controls or {},
 		font = fonts.mono,
 	}, debug)
@@ -82,10 +80,9 @@ function debug:add(ctrl)
 	self.controls[#self.controls + 1] = ctrl
 end
 
--- Open or close the panel. Saves state on toggle.
+-- Open or close the panel.
 function debug:toggle()
 	self.open = not self.open
-	require("lib.persist").save({ debug_open = self.open and 1 or 0, debug_sel = self.selected })
 end
 
 -- Handle a key. Returns true if consumed.
@@ -108,7 +105,6 @@ function debug:keypressed(key)
 		return false
 	end
 	keys[key]()
-	require("lib.persist").save({ debug_open = self.open and 1 or 0, debug_sel = self.selected })
 	return true
 end
 
