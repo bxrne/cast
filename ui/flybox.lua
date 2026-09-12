@@ -139,10 +139,7 @@ local function button(self)
 	love.graphics.setLineWidth(1)
 	love.graphics.rectangle("line", BTN.x, BTN.y, BTN.w, BTN.h, 5, 5)
 	love.graphics.setColor(theme.TEXT, 1)
-	love.graphics.printf("FLY BOX", BTN.x, BTN.y + 12, BTN.w - 30, "center")
-	love.graphics.setFont(self.mono)
-	love.graphics.setColor(ACCENT, 1)
-	love.graphics.printf(string.format("%02d", #tackle.list), BTN.x + BTN.w - 34, BTN.y + 13, 24, "right")
+	love.graphics.printf("FLY BOX", BTN.x, BTN.y + 12, BTN.w, "center")
 end
 
 local function list_col(self, d)
@@ -155,11 +152,9 @@ local function list_col(self, d)
 	love.graphics.setFont(self.body)
 	love.graphics.setColor(ACCENT, 1)
 	love.graphics.print("PATTERNS", d.x + PAD, d.y + PAD + 2)
-	if has_index then
-		love.graphics.setFont(self.mono)
-		love.graphics.setColor(theme.DIM, 1)
-		love.graphics.printf(string.format("%02d / %02d", #list, #list), d.x + list_w - PAD - 64, d.y + PAD + 2, 64, "right")
-	end
+	love.graphics.setColor(theme.EDGE, 0.45)
+	love.graphics.setLineWidth(1)
+	love.graphics.line(d.x + PAD, d.y + PAD + 24, d.x + list_w - PAD, d.y + PAD + 24)
 
 	-- Clip rows to the list column. The rows use whitespace, not separators.
 	love.graphics.setScissor(d.x + PAD - 8, d.y + LIST_TOP - 8, list_w + 16, d.h - LIST_TOP - LIST_BOTTOM + 16)
@@ -167,6 +162,10 @@ local function list_col(self, d)
 	for i = 1, #list do
 		local ry = ly + (i - 1) * ROW_H
 		local selected = i == self.selected
+		if selected then
+			love.graphics.setColor(theme.HI, 0.30)
+			love.graphics.rectangle("fill", d.x + PAD - 8, ry + 2, list_w - PAD, ROW_H - 6, 3, 3)
+		end
 		love.graphics.setFont(self.body)
 		love.graphics.setColor(selected and ACCENT or theme.TEXT, 1)
 		love.graphics.printf(list[i].name, d.x + PAD, ry + 7, text_w, "left")
@@ -182,13 +181,24 @@ local function list_col(self, d)
 	love.graphics.setScissor()
 end
 
+local META_LABEL_W = 72
+local META_GAP = 8
+
+-- Draw one label/value pair. Returns the y for the next row.
+-- The mono label sits 2px lower so its baseline matches the body value.
 local function draw_metadata(label, value, x, y, w, self)
+	local vw = w - META_LABEL_W
+	love.graphics.setFont(self.body)
+	local _, wrapped = self.body:getWrap(value, vw)
+	local line_px = self.body:getHeight() * self.body:getLineHeight()
+	local h = math.max(line_px, #wrapped * line_px)
 	love.graphics.setFont(self.mono)
 	love.graphics.setColor(theme.EDGE, 1)
-	love.graphics.print(label, x, y)
+	love.graphics.print(label, x, y + 2)
 	love.graphics.setFont(self.body)
 	love.graphics.setColor(theme.TEXT, 1)
-	love.graphics.printf(value, x + 72, y, w - 72, "left")
+	love.graphics.printf(value, x + META_LABEL_W, y, vw, "left")
+	return y + h + META_GAP
 end
 
 local function detail_col(self, d)
@@ -203,14 +213,17 @@ local function detail_col(self, d)
 	love.graphics.print("SPECIMEN", x, top)
 	love.graphics.setFont(self.mono)
 	love.graphics.setColor(theme.DIM, 1)
-	love.graphics.printf("/  " .. string.upper(f.kind), x + 104, top, col_w - 104, "left")
+	love.graphics.printf("/  " .. string.upper(f.kind), x + 104, top + 2, col_w - 184, "left")
 	love.graphics.setColor(theme.DIM, 1)
-	love.graphics.printf(string.format("%02d / %02d", self.selected, #tackle.list), x + col_w - 72, top, 72, "right")
+	love.graphics.printf(string.format("%02d / %02d", self.selected, #tackle.list), x + col_w - 72, top + 2, 72, "right")
+	love.graphics.setColor(theme.EDGE, 0.45)
+	love.graphics.setLineWidth(1)
+	love.graphics.line(x, top + 24, x + col_w, top + 24)
 
 	local preview_y = d.y + LIST_TOP - 4
 	local preview_h = math.max(130, math.min(math.floor(d.h * 0.43), d.h - 220))
 	local preview_bottom = preview_y + preview_h
-	love.graphics.setColor(theme.HI, 0.45)
+	love.graphics.setColor(theme.HI, 0.18)
 	love.graphics.rectangle("fill", x, preview_y, col_w, preview_h, 3, 3)
 	love.graphics.setColor(theme.EDGE, 0.65)
 	love.graphics.setLineWidth(1)
@@ -233,15 +246,16 @@ local function detail_col(self, d)
 	love.graphics.pop()
 
 	local copy_y = preview_bottom + PAD - 2
-	local line_h = math.max(18, math.floor(d.h * 0.048))
 	love.graphics.setFont(self.head)
 	love.graphics.setColor(theme.TEXT, 1)
 	love.graphics.printf(f.name, x, copy_y, col_w, "left")
+	local _, name_wrapped = self.head:getWrap(f.name, col_w)
+	local name_h = #name_wrapped * self.head:getHeight() * self.head:getLineHeight()
 
-	local meta_y = copy_y + line_h + 4
-	draw_metadata("RIG", f.rig, x, meta_y, col_w, self)
-	draw_metadata("WATER", f.water, x, meta_y + line_h + 4, col_w, self)
-	draw_metadata("TIP", f.tip, x, meta_y + (line_h + 4) * 2, col_w, self)
+	local meta_y = copy_y + name_h + 8
+	meta_y = draw_metadata("RIG", f.rig, x, meta_y, col_w, self)
+	meta_y = draw_metadata("WATER", f.water, x, meta_y, col_w, self)
+	draw_metadata("TIP", f.tip, x, meta_y, col_w, self)
 end
 
 function flybox:draw()

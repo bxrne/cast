@@ -73,6 +73,7 @@ end
 -- the reel and the wall stay live.
 function love.load()
 	boot = { screen = load_screen.new(), done = 0, total = 6, water = nil }
+	sfx.reel_start()
 end
 
 -- One build step per beat of the step timer. Independent steps
@@ -113,6 +114,7 @@ function love.update(dt)
 		end
 		if boot.done >= boot.total then
 			world.time = 0
+			sfx.reel_stop()
 			boot = nil
 		end
 		return
