@@ -22,16 +22,8 @@ function flybox.new()
 		open = false, selected = 1, scroll = 0,
 		font = fonts.mono, mono = fonts.mono,
 		head = fonts.head, body = fonts.body,
+		line = nil,
 	}, flybox)
-end
-
-function flybox:toggle()
-	self.open = not self.open
-end
-
--- True when x, y lands in the button.
-local function on_button(x, y)
-	return x >= BTN.x and x <= BTN.x + BTN.w and y >= BTN.y and y <= BTN.y + BTN.h
 end
 
 -- The open tray is always half the viewport and centered on both axes.
@@ -43,6 +35,33 @@ end
 
 local function list_width(d)
 	return math.max(150, math.min(LIST_W, d.w * 0.38))
+end
+
+-- Lure name tied to the line end, or nil. Main hands us
+-- the live line after every spawn.
+local function tied_name(self)
+	return self.line and self.line.fly or nil
+end
+
+-- TIE ON button slot. Bottom-right of the preview plate,
+-- so its geometry never moves with the metadata below.
+-- Declared after list_width, which it reads.
+local function tie_rect(d)
+	local list_w = list_width(d)
+	local x = d.x + list_w + GUTTER
+	local col_w = d.x + d.w - x - PAD
+	local preview_y = d.y + LIST_TOP - 4
+	local preview_h = math.max(130, math.min(math.floor(d.h * 0.43), d.h - 220))
+	return { x = x + col_w - 92, y = preview_y + preview_h - 30, w = 84, h = 22 }
+end
+
+function flybox:toggle()
+	self.open = not self.open
+end
+
+-- True when x, y lands in the button.
+local function on_button(x, y)
+	return x >= BTN.x and x <= BTN.x + BTN.w and y >= BTN.y and y <= BTN.y + BTN.h
 end
 
 -- Max scroll for the pattern list in this drawer.
@@ -85,6 +104,19 @@ function flybox:mousepressed(x, y)
 		if i >= 1 and i <= #tackle.list then
 			self.selected = i
 			clamp_scroll(self)
+		end
+		return true
+	end
+	-- TIE ON in the detail column. Equips the shown fly,
+	-- unequips it when already tied, replaces any other.
+	local tr = tie_rect(d)
+	if self.line and self.line.state ~= "fight"
+		and x >= tr.x and x <= tr.x + tr.w and y >= tr.y and y <= tr.y + tr.h then
+		local name = tackle.list[self.selected].name
+		if self.line.fly == name then
+			self.line.fly = nil
+		else
+			self.line.fly = name
 		end
 		return true
 	end
@@ -158,6 +190,7 @@ local function list_col(self, d)
 
 	-- Clip rows to the list column. The rows use whitespace, not separators.
 	love.graphics.setScissor(d.x + PAD - 8, d.y + LIST_TOP - 8, list_w + 16, d.h - LIST_TOP - LIST_BOTTOM + 16)
+	local tied = tied_name(self)
 	local ly = d.y + LIST_TOP - self.scroll
 	for i = 1, #list do
 		local ry = ly + (i - 1) * ROW_H
@@ -172,7 +205,11 @@ local function list_col(self, d)
 
 		love.graphics.setFont(self.mono)
 		love.graphics.setColor(selected and ACCENT or theme.DIM, 1)
-		love.graphics.printf(string.upper(list[i].kind), d.x + PAD, ry + 31, text_w, "left")
+		local kind = string.upper(list[i].kind)
+		if tied == list[i].name then
+			kind = kind .. " - TIED"
+		end
+		love.graphics.printf(kind, d.x + PAD, ry + 31, text_w, "left")
 		if has_index then
 			love.graphics.setColor(selected and ACCENT or theme.DIM, 1)
 			love.graphics.printf(string.format("%02d", i), d.x + list_w - PAD - index_w, ry + 7, index_w, "right")
@@ -244,6 +281,21 @@ local function detail_col(self, d)
 	love.graphics.translate(cx, cy)
 	tackle.draw(f, scale)
 	love.graphics.pop()
+
+	-- TIE ON equips the shown fly to the line end. Reads back
+	-- the live tie so it doubles as the equipped readout.
+	local tr = tie_rect(d)
+	local is_tied = tied_name(self) == f.name
+	love.graphics.setColor(0, 0, 0, 0.30)
+	love.graphics.rectangle("fill", tr.x + 1, tr.y + 2, tr.w, tr.h, 4, 4)
+	love.graphics.setColor(is_tied and ACCENT or theme.BG, 0.97)
+	love.graphics.rectangle("fill", tr.x, tr.y, tr.w, tr.h, 4, 4)
+	love.graphics.setColor(is_tied and theme.BG or theme.EDGE, 1)
+	love.graphics.setLineWidth(1)
+	love.graphics.rectangle("line", tr.x, tr.y, tr.w, tr.h, 4, 4)
+	love.graphics.setFont(self.mono)
+	love.graphics.setColor(is_tied and theme.BG or theme.TEXT, 1)
+	love.graphics.printf(is_tied and "TIED ON" or "TIE ON", tr.x, tr.y + 4, tr.w, "center")
 
 	local copy_y = preview_bottom + PAD - 2
 	love.graphics.setFont(self.head)

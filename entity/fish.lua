@@ -57,7 +57,11 @@ local function due_to_rise(self)
 end
 
 -- Step toward the current target. Returns true on arrival.
+-- Nil target reads as arrived. Callers must set a new one.
 local function move_toward(self, river, dt, pace)
+	if not self.target_t then
+		return true
+	end
 	local dt_t, dt_a = self.target_t - self.t, self.target_across - self.across
 	local dist = math.sqrt(dt_t * dt_t + dt_a * dt_a * 0.15)
 	if dist < 0.012 then
@@ -84,9 +88,65 @@ local function breach_fx(river, self, spec)
 	end
 end
 
--- Bolt deep and away from the player or a bird while spooked.
-local function act_flee(ctx)
+-- Drag a tired fish toward the rod in screen space. Finite
+-- differences on (t, across): step to the neighbour closest
+-- to the cursor. Bypasses the channel clamp so banks count.
+local function pull_toward(self, river, mx, my, dt, rate)
+	river:sample_into(self.t, self.across, nil, SCRATCH)
+	local cd = (SCRATCH.x - mx) * (SCRATCH.x - mx) + (SCRATCH.y - my) * (SCRATCH.y - my)
+	local bx, by, bd, e = 0, 0, cd, 0.01
+	local steps = { { e, 0 }, { -e, 0 }, { 0, e }, { 0, -e } }
+	for i = 1, 4 do
+		local nt = clamp(self.t + steps[i][1], 0.02, 0.98)
+		local na = clamp(self.across + steps[i][2], 0.02, 0.98)
+		river:sample_into(nt, na, nil, SCRATCH)
+		local d = (SCRATCH.x - mx) * (SCRATCH.x - mx) + (SCRATCH.y - my) * (SCRATCH.y - my)
+		if d < bd then
+			bd, bx, by = d, steps[i][1], steps[i][2]
+		end
+	end
+	if bd < cd then
+		self.t = clamp(self.t + bx / e * rate * dt, 0.02, 0.98)
+		self.across = clamp(self.across + by / e * rate * dt, 0.02, 0.98)
+	end
+	self.at_lie, self.hold_time = false, 0
+end
+
+-- Hooked fish fight first and ignore everything else. Bursts
+-- while strong, then the rod drags them. A tired fish that
+-- reaches the shallows or the edge is caught.
+local function act_fight(ctx)
 	local self = ctx.fish
+	if not self.hooked then
+		return bt.FAILURE
+	end
+	if (self.fight_t or 0) > 0 then
+		self.activity = "burst"
+		self.hunting = nil
+		self.fight_t = self.fight_t - ctx.dt
+		self.retarget = (self.retarget or 0) - ctx.dt
+		if self.retarget <= 0 or not self.target_t then
+			self.retarget = 0.35
+			local tick = math.floor(self.clock * 3)
+			self.target_t = clamp(self.t + (hash01(self.id, self.takes or 0, tick) - 0.5) * 0.1, 0.05, 0.95)
+			self.target_across = habitat.channel_across(self.across + (hash01(self.id, tick, 91) - 0.5) * 0.3)
+		end
+		move_toward(self, ctx.river, ctx.dt, self.cruise * 1.8)
+		return bt.RUNNING
+	end
+	self.activity = "cruise"
+	local m = ctx.mouse or { x = self.x, y = self.y }
+	pull_toward(self, ctx.river, m.x, m.y, ctx.dt, self.cruise * 0.9)
+	ctx.river:sample_into(self.t, self.across, nil, SCRATCH)
+	if SCRATCH.depth < 7 or math.abs(self.across - 0.5) > 0.44 then
+		ctx.events[#ctx.events + 1] = { kind = "caught", fish = self, x = self.x, y = self.y }
+		return bt.SUCCESS
+	end
+	return bt.RUNNING
+end
+
+-- Bolt deep and away from the player or a bird while spooked.
+local function act_flee(ctx)	local self = ctx.fish
 	if mind.spooked(self, ctx.player, ctx.river) then
 		self.spook_t = math.max(self.spook_t, 1.1 + self.species.skittish)
 	end
@@ -193,6 +253,41 @@ local function act_take(ctx)
 		self.hunting = nil
 		return bt.FAILURE
 	end
+	-- The laid fly is the biggest meal on the film. Behaviour
+	-- drives the strike: film and emerge hunters only, hooked
+	-- on contact bar a small miss.
+	local lure = ctx.lure
+	if lure and lure.active then
+		local dx, dy = self.x - lure.x, self.y - lure.y
+		if dx * dx + dy * dy < 130 * 130 then
+			if dx * dx + dy * dy > 20 * 20 then
+				self.hunting = true
+				self.activity = "cruise"
+				self.target_t, self.target_across = lure.t, habitat.channel_across(lure.across)
+				move_toward(self, ctx.river, ctx.dt, self.cruise * 1.25)
+				return bt.RUNNING
+			end
+			local u = hash01(self.id, (self.takes or 0) + 1, self.seed)
+			self.takes = (self.takes or 0) + 1
+			if u < 0.85 then
+				self.hooked = true
+				self.hunting = nil
+				self.hold_time = 0
+				self.activity = "burst"
+				self.fight_t = 2.5 + hash01(self.id, self.takes, self.seed + 1) * 1.5
+				if ctx.river.splash then
+					ctx.river.splash:ring(lure.x, lure.y, 14, 0.8)
+				end
+				ctx.events[#ctx.events + 1] = { kind = "hook", fish = self, x = lure.x, y = lure.y }
+				return bt.SUCCESS
+			end
+			local spec = MANNERS["sip"]
+			self.surface = { t = 0, duration = spec.duration, height = spec.height, ring = spec.ring, name = "sip" }
+			self.activity = "rise"
+			breach_fx(ctx.river, self, spec)
+			return bt.SUCCESS
+		end
+	end
 	local radius = self.phase == "film" and 95 or 60
 	local fly = nearest_fly(self, ctx.insects, radius)
 	if not fly then
@@ -286,9 +381,10 @@ local function act_feed(ctx)
 	return bt.SUCCESS
 end
 
--- Flee, else bully, else take, else rise, else seek, else feed.
+-- Fight, else flee, else bully, else take, else rise, else seek, else feed.
 local function tree()
 	return bt.selector({
+		bt.action(act_fight),
 		bt.action(act_flee),
 		bt.action(act_bully),
 		bt.action(act_take),
@@ -374,8 +470,9 @@ local function dimple(self, river, dt)
 end
 
 -- Tick every fish tree, then move each one through the water column.
--- env carries birds and insects for threat and hunt checks. Take
--- events come back so the main loop can answer the flies.
+-- env carries birds, insects, the laid fly, and the rod tip for
+-- threat, hunt, strike, and pull checks. Take, hook, and catch
+-- events come back so the main loop can answer flies and net.
 function fish.update(list, dt, river, player, env)
 	env = env or {}
 	local events = {}
@@ -383,7 +480,7 @@ function fish.update(list, dt, river, player, env)
 		local self = list[i]
 		self.clock = self.clock + dt
 		self.phase = mind.phase(self)
-		bt.tick(self.tree, { fish = self, river = river, dt = dt, player = player, list = list, birds = env.birds, insects = env.insects, events = events })
+		bt.tick(self.tree, { fish = self, river = river, dt = dt, player = player, list = list, birds = env.birds, insects = env.insects, lure = env.lure, mouse = env.mouse, events = events })
 		mind.approach_column(self, mind.column_target(self, self.phase), dt)
 		dimple(self, river, dt)
 		local ot, oa = self.t, self.across

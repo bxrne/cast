@@ -6,17 +6,26 @@ local flybox_ui = require "ui.flybox"
 local fish = require "entity.fish"
 local birds = require "entity.birds"
 local insects = require "entity.insects"
+local fline = require "entity.line"
+local netbox_ui = require "ui.net"
 local data = require "lib.data"
 local load_screen = require "ui.splash"
 local sfx = require "sfx"
 
-local world, dbg, boot, flybox
+local world, dbg, boot, flybox, netbox
 
--- Spawn the seeded school, birds, and flies for the current river.
+-- Spawn the seeded school, birds, flies, and line for the
+-- current river. The creel survives reseeds and resizes.
 local function spawn_entities()
 	world.fish = fish.spawn(world.river, world.seed)
 	world.birds = birds.spawn(world.river, world.seed)
 	world.insects = insects.spawn(world.river, world.seed)
+	world.line = fline.spawn()
+	world.net = world.net or {}
+	world.mouse = world.mouse or { x = 0, y = 0 }
+	if flybox then
+		flybox.line = world.line
+	end
 end
 
 -- Apply a new seed to the river and entities.
@@ -143,6 +152,8 @@ local function boot_step()
 		spawn_entities()
 		build_panel()
 		flybox = flybox_ui.new()
+		flybox.line = world.line
+		netbox = netbox_ui.new()
 		sfx.build()
 		n = 6
 	end
@@ -171,6 +182,7 @@ function love.update(dt)
 	if dt > 0.05 then dt = 0.05 end
 	dt = dt * world.time_scale
 	world.river:update(dt)
+	world.mouse.x, world.mouse.y = love.mouse.getPosition()
 	-- Hidden life stays out of the sim, not just the draw.
 	-- Birds off means no spooks and no pecks. Flies off
 	-- means nothing to hunt and nothing to scatter.
@@ -185,13 +197,43 @@ function love.update(dt)
 		end
 		insects.update(world.insects, dt, world.river)
 	end
+	local lure = fline.lure(world.line)
 	local events = fish.update(world.fish, dt, world.river, nil, {
 		birds = show_birds and world.birds or nil,
 		insects = show_flies and world.insects or nil,
+		lure = lure,
+		mouse = world.mouse,
 	})
 	if show_flies and events and #events > 0 then
 		insects.apply_events(world.insects, events, world.river)
 	end
+	for i = 1, #events do
+		local ev = events[i]
+		if ev.kind == "hook" then
+			if world.line.state == "laid" then
+				world.line.state = "fight"
+				world.line.hook = ev.fish
+			else
+				ev.fish.hooked = false
+			end
+		elseif ev.kind == "caught" then
+			for j = 1, #world.fish do
+				if world.fish[j].id == ev.fish.id then
+					local landed = table.remove(world.fish, j)
+					world.net[#world.net + 1] = {
+						common = landed.species.common,
+						length = math.floor(landed.length),
+					}
+					break
+				end
+			end
+			if world.river.splash then
+				world.river.splash:ring(ev.x, ev.y, 18, 0.9)
+			end
+			fline.reset(world.line)
+		end
+	end
+	fline.update(world.line, world.river, world.mouse.x, world.mouse.y, dt)
 	-- Water bed follows the beat. Flow norm plus turbulence
 	-- steer the three voices.
 	local u = math.max(0, math.min(1, (world.river.flow.base_speed - 0.45) / 1.1))
@@ -212,10 +254,19 @@ function love.draw()
 	if world.show_birds ~= false then
 		birds.draw(world.birds)
 	end
+	fline.draw(world.line, world.mouse.x, world.mouse.y)
 	if world.show_fish then
 		fish.draw_indicators(world.fish)
 	end
 	flybox:draw()
+	netbox:draw(world.net)
+	love.graphics.setFont(netbox.mono)
+	love.graphics.setColor(0.55, 0.54, 0.42, 0.8)
+	local hint = "space cast - wheel down mend - wheel up slack"
+	if world.line.fly then
+		hint = world.line.fly .. " tied - " .. hint
+	end
+	love.graphics.print(hint, 16, love.graphics.getHeight() - 24)
 	dbg:draw()
 end
 
@@ -234,14 +285,23 @@ function love.keypressed(key)
 	if dbg:keypressed(key) then
 		return
 	end
+	-- Space works the line: lift, backcast, timed forward cast.
+	if key == "space" then
+		fline.press(world.line, world.mouse.x, world.mouse.y)
+		return
+	end
 	-- f toggles the fly box.
 	if key == "f" then
 		flybox:toggle()
+		if flybox.open then
+			netbox.open = false
+		end
 		return
 	end
-	-- Esc closes the drawer. Nothing quits the game by key.
+	-- Esc closes the drawers. Nothing quits the game by key.
 	if key == "escape" then
 		flybox.open = false
+		netbox.open = false
 		return
 	end
 	if key == "f12" then
@@ -264,18 +324,42 @@ function love.resize(w, h)
 	end
 end
 
--- Route clicks to the fly box first.
+-- Route clicks to the fly box and net first. The two drawers
+-- stay exclusive: opening one closes the other.
 function love.mousepressed(x, y, button)
 	if boot or button ~= 1 then
 		return
 	end
-	flybox:mousepressed(x, y)
+	if flybox:mousepressed(x, y) then
+		if flybox.open then
+			netbox.open = false
+		end
+		return
+	end
+	if netbox:mousepressed(x, y, world.net) then
+		if netbox.open then
+			flybox.open = false
+		end
+		return
+	end
 end
 
--- Wheel scrolls the fly box list while it is open.
+-- Wheel scrolls the fly box list while it is open. Otherwise
+-- down mends the laid line and up pays out slack.
 function love.wheelmoved(dx, dy)
 	if boot then
 		return
 	end
-	flybox:wheelmoved(dx, dy)
+	if flybox.open then
+		flybox:wheelmoved(dx, dy)
+		return
+	end
+	if netbox.open then
+		return
+	end
+	if dy < 0 then
+		fline.mend(world.line, world.river)
+	elseif dy > 0 then
+		fline.slack(world.line)
+	end
 end

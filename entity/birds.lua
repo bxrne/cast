@@ -49,7 +49,9 @@ end
 
 -- Emergent rock survey, cached per river build. Rocks never
 -- move, so sampling them every frame is pure waste. Keyed
--- weak like the habitat grid so dead rivers drop out.
+-- weak like the habitat grid so dead rivers drop out. Mid
+-- channel rocks perch first so birds stay out of the bank.
+-- yo is the rock crown height: feet land on top, never sunk.
 local survey_cache = setmetatable({}, { __mode = "k" })
 local function survey(river)
 	local hit = survey_cache[river]
@@ -57,15 +59,20 @@ local function survey(river)
 		return hit.cands, hit.xy
 	end
 	local list = river.obstacles or {}
-	local cands, xy = {}, {}
+	local mid, rim, xy = {}, {}, {}
 	for i = 1, #list do
 		local o = list[i]
 		local s = river:sample(o.t, o.across)
-		xy[i] = { x = s.x, y = s.y }
+		xy[i] = { x = s.x, y = s.y, yo = o.r * 0.72 * (o.ey or 1) }
 		if s.depth < o.r * 0.85 then
-			cands[#cands + 1] = i
+			if o.across > 0.24 and o.across < 0.76 then
+				mid[#mid + 1] = i
+			else
+				rim[#rim + 1] = i
+			end
 		end
 	end
+	local cands = #mid > 0 and mid or rim
 	if #cands == 0 and #list > 0 then
 		local big, bi = -1, 1
 		for i = 1, #list do
@@ -73,7 +80,7 @@ local function survey(river)
 				big, bi = list[i].r, i
 			end
 		end
-		cands[1] = bi
+		cands = { bi }
 	end
 	survey_cache[river] = { id = river.cache_id, cands = cands, xy = xy }
 	return cands, xy
@@ -104,28 +111,31 @@ function birds.spawn(river, seed)
 	local base = river.flow and river.flow.base_speed or 1
 	local flow_u = clamp(((base - 0.45) / 1.1), 0, 1)
 	local size_u = clamp((((char.water_half or 120) - 78) / 138), 0, 1)
-	local cands = perch_rocks(river)
+	local cands, rxy = survey(river)
 	local out = {}
 	for i = 1, count do
 		local tp = pick_type(char, flow_u, size_u, hash01(seed, i, 501))
 		local rock = 0
 		local t, across = 0.5, 0.5
+		local px, py = 0, 0
 		if #cands > 0 then
 			rock = cands[math.floor(hash01(seed, i, 503) * #cands) + 1]
 			local o = river.obstacles[rock]
 			t, across = o.t, o.across
+			px, py = rxy[rock].x, rxy[rock].y - rxy[rock].yo
 		else
 			t = 0.2 + hash01(seed, i, 504) * 0.6
 			across = hash01(seed, i, 505) < 0.5 and 0.10 or 0.90
+			local s = river:sample(t, across)
+			px, py = s.x, s.y
 		end
-		local s = river:sample(t, across)
 		out[#out + 1] = {
 			kind = "bird", id = i, seed = seed, type = tp,
 			state = "perched", timer = perch_dur(seed, i, 1),
 			trips = 0, rock = rock, t = t, across = across,
 			from_t = t, from_a = across, to_t = t, to_a = across,
-			fx = s.x, fy = s.y, x = s.x, y = s.y,
-			tx = s.x, ty = s.y, alt = 0, prog = 0, dur = 1,
+			fx = px, fy = py, x = px, y = py,
+			tx = px, ty = py, alt = 0, prog = 0, dur = 1,
 			flap = hash01(seed, i, 506) * TAU,
 			peck_t = 3 + hash01(seed, i, 512) * 5,
 			grace = 0, clock = hash01(seed, i, 507) * 10,
@@ -174,7 +184,7 @@ function birds.update(list, dt, river)
 			b.timer = b.timer - dt
 			local p = xy[b.rock]
 			if p then
-				b.x, b.y = p.x, p.y - 6
+				b.x, b.y = p.x, p.y - p.yo
 			else
 				local s = river:sample(b.t, b.across)
 				b.x, b.y = s.x, s.y
@@ -278,11 +288,12 @@ local function draw_perched(b)
 	local kx, ky = x + 11 * s, by - 12 * s * neck
 	local hx, hy = x + 9 * s, by - 21 * s * neck
 	love.graphics.setColor(OUTLINE[1], OUTLINE[2], OUTLINE[3], 1)
-	love.graphics.setLineWidth(4 * s)
+	love.graphics.setLineWidth(2.5 * s)
+	love.graphics.line(x + 7 * s, by - 2 * s, kx, ky, hx, hy)
+	love.graphics.setColor(b.type.body[1], b.type.body[2], b.type.body[3], 1)
+	love.graphics.setLineWidth(math.max(2, 1.2 * s))
 	love.graphics.line(x + 7 * s, by - 2 * s, kx, ky, hx, hy)
 	love.graphics.setLineWidth(1)
-	love.graphics.setColor(b.type.body[1], b.type.body[2], b.type.body[3], 1)
-	love.graphics.line(x + 7 * s, by - 2 * s, kx, ky, hx, hy)
 	love.graphics.circle("fill", hx, hy, 3.6 * s, 10)
 	love.graphics.setColor(b.type.beak[1], b.type.beak[2], b.type.beak[3], 1)
 	love.graphics.polygon("fill", hx + 2 * s, hy - 1 * s, hx + 11 * s, hy + 0.5 * s, hx + 2 * s, hy + 2 * s)

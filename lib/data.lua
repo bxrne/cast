@@ -26,7 +26,10 @@ local groups, lists = {}, {}
 
 local function read_file(path)
 	if love and love.filesystem then
-		return love.filesystem.read(path)
+		local ok, raw = pcall(love.filesystem.read, path)
+		if ok and raw then
+			return raw
+		end
 	end
 	local f = io.open(path, "r")
 	if not f then

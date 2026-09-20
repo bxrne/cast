@@ -177,10 +177,13 @@ end
 -- Apply fish take events from the frame. Each event is
 -- { x, y, kind } with kind gulp, jump, or miss. A gulp
 -- eats the nearest catchable fly. Jump and miss only scatter.
+-- Hook and catch events belong to the line, not the hatch.
 function insects.apply_events(list, events, river)
 	for e = 1, #events do
 		local ev = events[e]
-		if ev.kind == "gulp" then
+		if ev.kind ~= "gulp" and ev.kind ~= "jump" and ev.kind ~= "miss" then
+			-- Not ours. The net answers hook and catch.
+		elseif ev.kind == "gulp" then
 			local best, bd = nil, 16
 			for i = 1, #list do
 				local f = list[i]
